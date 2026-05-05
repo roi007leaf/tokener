@@ -39,7 +39,7 @@ It supports common PF2e token module styles, including:
 - older PF2e art mapping modules such as PF2e All Tokens
 - other token modules that store images in recognizable token folders
 
-Some third-party modules only include token images and do not include actor portrait images. In those cases, the preview will show the token image and say that no actor image is available.
+Some third-party modules only include token images and do not include actor portrait images. In those cases, PF2e Tokener hides the missing image side and shows only the art it can use.
 
 ## Installation
 
@@ -94,7 +94,7 @@ Close the preview with:
 
 ## Searching
 
-The search box starts with the selected actor's name.
+The search box starts empty so you can search immediately. PF2e Tokener still uses the selected token behind the scenes to show best matches first.
 
 You can search by:
 
@@ -122,6 +122,8 @@ You can also use direct tag searches:
 When a tag helped match a result, PF2e Tokener shows the matched tags as small chips on that result.
 
 Best matches appear first. Broader results appear below them.
+
+Result cards show the art name. Hover a shortened card name to see the full name and the source module.
 
 ## Source Filter
 
@@ -171,7 +173,7 @@ Try clearing the search and source filter.
 
 Some modules only provide token art. Others provide actor portraits too.
 
-If PF2e Tokener can find both, it shows both. If a module only has token art, the actor image side will be empty.
+If PF2e Tokener can find both, it shows both. If a module only has token art, the preview shows only the token image.
 
 ### I Enabled A New Token Module But Do Not See It
 

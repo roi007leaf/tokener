@@ -16,7 +16,12 @@ import {
   getPanelSourceFilterOptions,
   getSourceFilterLabel,
 } from './sources.js';
-import { getTagFilterOptions, getTagGroupSearchState, isTagOptionSearchMatch } from './tags.js';
+import {
+  getTagFilterOptions,
+  getTagGroupSearchState,
+  getTagListCountLabel,
+  isTagOptionSearchMatch,
+} from './tags.js';
 import {
   getDocumentActor,
   localize,
@@ -109,7 +114,7 @@ export function getTokenPickerApplicationClass(
     constructor({ tokenDocument } = {}) {
       super();
       this.tokenDocument = tokenDocument;
-      this.searchQuery = getDefaultSearchQuery(tokenDocument);
+      this.searchQuery = '';
       this.selectedSourceIds = null;
       this.sourceMenuOpen = false;
       this.sourceFilterQuery = '';
@@ -515,6 +520,7 @@ function prepareTagFilterView(options, app) {
   const visibleOptions = (activeGroup?.options ?? []).filter((option) =>
     isTagOptionSearchMatch(option, tagFilter),
   );
+  const activeGroupTotal = activeGroup?.options.length ?? 0;
 
   return {
     active: activeTags,
@@ -530,6 +536,7 @@ function prepareTagFilterView(options, app) {
       .join(' '),
     activeGroupLabel: activeGroup?.label ?? '',
     clearLabel: localize('HUD.ClearTags', 'Clear tags'),
+    countLabel: getTagListCountLabel(visibleOptions.length, activeGroupTotal, Boolean(tagFilter)),
     expanded: app.tagMenuOpen ? 'true' : 'false',
     filterQuery: app.tagFilterQuery,
     groups: groups.map((group) => {
@@ -553,7 +560,7 @@ function prepareTagFilterView(options, app) {
     hasOptions: options.length > 0,
     isOpen: app.tagMenuOpen,
     searchPlaceholder: localize('HUD.TagSearchPlaceholder', 'Search tags'),
-    totalCount: options.length,
+    totalCount: activeGroupTotal,
     visibleCount: visibleOptions.length,
     visibleOptions: visibleOptions.map((option) => ({
       ...option,
@@ -610,7 +617,7 @@ function prepareCandidateView(candidate, app, viewId) {
     hasMatchedTags: Array.isArray(candidate.matchedTags) && candidate.matchedTags.length > 0,
     hasPreview: hasPreview,
     previewSrc: previewSrc,
-    subtitle: getDefaultSearchQuery(app.tokenDocument),
+    cardTooltip: getCandidateCardTooltip(candidate),
     tabIndex: isUnavailable ? '-1' : '0',
     viewId,
   };
@@ -636,8 +643,8 @@ function groupTagOptions(options) {
   return groups;
 }
 
-function getDefaultSearchQuery(tokenDocument) {
-  return getDocumentActor(tokenDocument)?.name ?? tokenDocument?.name ?? '';
+function getCandidateCardTooltip(candidate) {
+  return [candidate.label, candidate.moduleTitle].filter(Boolean).join(' | ');
 }
 
 function openFallbackPicker() {

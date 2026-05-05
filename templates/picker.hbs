@@ -107,7 +107,7 @@
       <div class='pf2e-tokener-tag-list'>
         <div class='pf2e-tokener-tag-list-header'>
           <span>{{tags.activeGroupLabel}}</span>
-          <span>{{tags.visibleCount}} / {{tags.totalCount}}</span>
+          <span>{{tags.countLabel}}</span>
         </div>
 
         <div class='pf2e-tokener-tag-options'>
@@ -148,14 +148,9 @@
                 <div class='pf2e-tokener-badge'>{{currentLabel}}</div>
                 <div
                   class='pf2e-tokener-label'
-                  data-tooltip='{{label}}'
+                  data-tooltip='{{cardTooltip}}'
                   data-tooltip-direction='UP'
                 >{{label}}</div>
-                <div
-                  class='pf2e-tokener-source'
-                  data-tooltip='{{moduleTitle}}'
-                  data-tooltip-direction='UP'
-                >{{subtitle}}</div>
 
                 {{#if hasMatchedTags}}
                   <div class='pf2e-tokener-tags'>

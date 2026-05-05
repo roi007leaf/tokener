@@ -43,11 +43,13 @@ Initial release of PF2e Tokener.
 - Tag browsing now uses all discovered datasheet tags instead of only a short top-tag list.
 - Tag browsing now has grouped categories, tag search, active tag chips, and a clear-tags button.
 - Selected tags now stay as chips instead of being inserted into the main search text.
+- The search box now starts empty while best matches still use the selected token automatically.
 - Token datasheets are now discovered from common datasheet folders in token modules, so more installed token packs can contribute searchable tags.
 - Duplicate results from the same token image are merged so the richer result is shown.
 - Folder-based token images can now pick up matching actor portraits and token ring subject art when those images use the same filename.
 - Character Gallery entries now show actor images when portrait art is available.
 - Monster Core 2 entries now show actor images when portrait art is available.
+- Result cards now show the art name and keep the source module in the tooltip.
 
 ### Fixed
 
@@ -58,10 +60,13 @@ Initial release of PF2e Tokener.
 - Fixed cases where a token result showed no actor image even though the source module had one.
 - Fixed Monster Core 2 results such as Dragon Adult Phase showing token art without actor art.
 - Fixed Character Gallery preview results missing actor portrait art.
+- Fixed broad results repeating the selected token name on every card instead of showing each result's real name.
+- Fixed result titles disappearing on non-current cards after moving the source module into the tooltip.
+- Fixed fullscreen preview panes showing broken image placeholders when that side has no valid art.
 
 ### Notes
 
 - PF2e Tokener does not include art. It uses art from enabled modules.
-- Some modules only provide token images, so actor portrait preview may be empty for those results.
+- Some modules only provide token images, so the fullscreen preview may show only the token image for those results.
 - Utility images such as treasure, hazards, rings, point trackers, or backgrounds may not have actor portraits.
 - Reload the world after enabling or disabling token art modules.

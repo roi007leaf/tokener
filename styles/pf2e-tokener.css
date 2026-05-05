@@ -241,7 +241,7 @@
 }
 
 #token-hud .pf2e-tokener-badge {
-  display: none;
+  display: block;
   justify-self: center;
   transform: translateY(-16px);
   max-width: 64px;
@@ -254,10 +254,14 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 #token-hud .pf2e-tokener-card.is-current .pf2e-tokener-badge {
-  display: block;
+  visibility: visible;
+  opacity: 1;
 }
 
 #token-hud .pf2e-tokener-label,
@@ -806,7 +810,7 @@
 }
 
 .pf2e-tokener-app .pf2e-tokener-badge {
-  display: none;
+  display: block;
   justify-self: center;
   max-width: 64px;
   padding: 1px 4px;
@@ -819,10 +823,14 @@
   font-size: 9px;
   line-height: 1.2;
   transform: translateY(-16px);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pf2e-tokener-app .pf2e-tokener-card.is-current .pf2e-tokener-badge {
-  display: block;
+  visibility: visible;
+  opacity: 1;
 }
 
 .pf2e-tokener-app .pf2e-tokener-label,
@@ -962,7 +970,7 @@
 
 .pf2e-tokener-preview-panes {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
   min-height: 0;
 }
@@ -973,6 +981,10 @@
   gap: 8px;
   min-width: 0;
   min-height: 0;
+}
+
+.pf2e-tokener-preview-pane.is-hidden {
+  display: none;
 }
 
 .pf2e-tokener-preview-pane h3 {

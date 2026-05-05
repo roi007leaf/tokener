@@ -19,16 +19,17 @@ export function createMappedCandidates({ module, mapping, sourceType = 'native' 
     if (!isObject(actors)) continue;
     for (const [actorId, info] of Object.entries(actors)) {
       const token = normalizeMappedToken(info);
-      if (!token?.tokenSrc) continue;
+      const portraitSrc = typeof info?.actor === 'string' ? info.actor : undefined;
+      if (!token?.tokenSrc && !portraitSrc) continue;
 
-      const label = normalizeLabel(info?.name) || labelFromPath(token.tokenSrc);
+      const label = normalizeLabel(info?.name) || labelFromPath(token?.tokenSrc || portraitSrc);
       candidates.push(
         makeCandidate({
           actorId,
           label,
           module,
           packKey,
-          portraitSrc: typeof info?.actor === 'string' ? info.actor : undefined,
+          portraitSrc,
           sourceType,
           ...token,
         }),
@@ -46,14 +47,15 @@ export function createDatasheetCandidates({ module, datasheet, sourceType = 'dat
   for (const entry of entries) {
     if (!isObject(entry)) continue;
     const art = entry.art;
-    if (!isObject(art) || !art.token) continue;
+    if (!isObject(art) || (!art.token && !art.portrait && !art.actor)) continue;
 
     const scale = numberOr(art.scale, 1);
+    const portraitSrc = art.portrait || art.actor;
     candidates.push(
       makeCandidate({
-        label: entry.label || labelFromPath(art.token),
+        label: entry.label || labelFromPath(art.token || portraitSrc),
         module,
-        portraitSrc: art.portrait,
+        portraitSrc,
         scaleX: scale,
         scaleY: scale,
         sourceType,
@@ -166,14 +168,14 @@ export function dedupeCandidates(candidates) {
   const byToken = new Map();
   const order = [];
   for (const candidate of candidates) {
-    const key = normalizePath(candidate?.tokenSrc);
+    const key = candidateDedupeKey(candidate);
     if (!key) continue;
 
     const existing = byToken.get(key);
     if (existing) {
       byToken.set(key, mergeCandidateArt(existing, candidate));
     } else {
-      byToken.set(key, { ...candidate, tokenSrc: key });
+      byToken.set(key, { ...candidate, tokenSrc: normalizePath(candidate?.tokenSrc) });
       order.push(key);
     }
   }
@@ -219,22 +221,26 @@ function makeCandidate({
   tokenSrc,
 }) {
   const normalizedPackKey = packKey ? normalizePackKey(packKey) : undefined;
+  const normalizedTokenSrc = normalizePath(tokenSrc);
+  const normalizedPortraitSrc = normalizePath(portraitSrc);
+  const normalizedSubjectSrc = normalizePath(subjectSrc);
+  const artKey = normalizedTokenSrc || normalizedPortraitSrc || normalizedSubjectSrc;
   const candidate = {
     actorId,
     canonicalPackKey: normalizedPackKey,
-    id: makeCandidateId(module?.id, packKey, actorId, tokenSrc),
-    label: normalizeLabel(label) || labelFromPath(tokenSrc),
+    id: makeCandidateId(module?.id, packKey, actorId, artKey),
+    label: normalizeLabel(label) || labelFromPath(artKey),
     moduleId: module?.id || 'unknown',
     moduleTitle: module?.title || module?.id || 'Unknown Module',
     packKey,
-    portraitSrc,
+    portraitSrc: normalizedPortraitSrc,
     scaleX,
     scaleY,
     sourceType,
     subjectScale,
-    subjectSrc,
+    subjectSrc: normalizedSubjectSrc,
     tags,
-    tokenSrc: normalizePath(tokenSrc),
+    tokenSrc: normalizedTokenSrc,
   };
   candidate.searchText = buildSearchText(candidate);
   return candidate;
@@ -254,7 +260,7 @@ function buildSearchText(candidate) {
       candidate.canonicalPackKey,
       candidate.sourceType,
       tagSearchText(candidate.tags),
-      labelFromPath(candidate.tokenSrc || ''),
+      labelFromPath(candidate.tokenSrc || candidate.portraitSrc || candidate.subjectSrc || ''),
     ]
       .filter(Boolean)
       .join(' '),
@@ -425,17 +431,36 @@ function mergeCandidateArt(existing, incoming) {
     id: primary.id ?? fallback.id,
     label: primary.label ?? fallback.label,
     packKey: primary.packKey ?? fallback.packKey,
-    portraitSrc: primary.portraitSrc ?? fallback.portraitSrc,
+    portraitSrc: primary.portraitSrc || fallback.portraitSrc,
     scaleX: primary.scaleX ?? fallback.scaleX,
     scaleY: primary.scaleY ?? fallback.scaleY,
     sourceType: primary.sourceType ?? fallback.sourceType,
     subjectScale: primary.subjectScale ?? fallback.subjectScale,
-    subjectSrc: primary.subjectSrc ?? fallback.subjectSrc,
+    subjectSrc: primary.subjectSrc || fallback.subjectSrc,
     tags: primary.tags ?? fallback.tags,
-    tokenSrc: normalizePath(primary.tokenSrc ?? fallback.tokenSrc),
+    tokenSrc: normalizePath(primary.tokenSrc || fallback.tokenSrc),
   };
   merged.searchText = buildSearchText(merged);
   return merged;
+}
+
+function candidateDedupeKey(candidate) {
+  const tokenKey = normalizePath(candidate?.tokenSrc);
+  if (tokenKey) return tokenKey;
+
+  const moduleId = candidate?.moduleId || 'unknown';
+  const actorKey =
+    candidate?.actorId &&
+    (candidate?.canonicalPackKey || normalizePackKey(candidate?.packKey)) &&
+    `${moduleId}|${candidate.canonicalPackKey || normalizePackKey(candidate.packKey)}|${candidate.actorId}`;
+  return (
+    actorKey ||
+    normalizePath(candidate?.tokenSrc) ||
+    normalizePath(candidate?.portraitSrc) ||
+    normalizePath(candidate?.subjectSrc) ||
+    candidate?.id ||
+    ''
+  );
 }
 
 function candidateRichness(candidate) {

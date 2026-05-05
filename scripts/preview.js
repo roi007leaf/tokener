@@ -14,7 +14,7 @@ export function getImagePreviewItems(candidate) {
       src: candidate?.tokenSrc || '',
       available: Boolean(candidate?.tokenSrc),
     },
-  ];
+  ].filter((item) => item.available);
 }
 
 export function openImagePreview(candidate) {
@@ -55,7 +55,8 @@ export function openImagePreview(candidate) {
 
   const panes = doc.createElement('div');
   panes.className = 'pf2e-tokener-preview-panes';
-  for (const item of getImagePreviewItems(candidate)) {
+  const items = getImagePreviewItems(candidate);
+  for (const item of items) {
     panes.append(createPreviewPane(item));
   }
 
@@ -91,17 +92,11 @@ function createPreviewPane(item) {
   const frame = doc.createElement('div');
   frame.className = 'pf2e-tokener-preview-frame';
 
-  if (item.available) {
-    const image = doc.createElement('img');
-    image.src = item.src;
-    image.alt = item.label;
-    frame.append(image);
-  } else {
-    const empty = doc.createElement('div');
-    empty.className = 'pf2e-tokener-preview-empty';
-    empty.textContent = localize('Preview.ActorUnavailable', 'No actor image available.');
-    frame.append(empty);
-  }
+  const image = doc.createElement('img');
+  image.src = item.src;
+  image.alt = item.label;
+  image.addEventListener('error', () => pane.classList.add('is-hidden'));
+  frame.append(image);
 
   pane.append(heading, frame);
   return pane;

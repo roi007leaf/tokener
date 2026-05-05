@@ -18,6 +18,7 @@ import {
   filterSourceOptionsByQuery,
   getTagGroupSearchState,
   getTagFilterOptions,
+  getTagListCountLabel,
   buildCandidateSearchQuery,
   getTokenPickerApplicationClass,
   rebuildIndex,
@@ -166,6 +167,45 @@ test('old pf2e-art string and object token shapes normalize to candidates', () =
   assert.equal(candidates[1].scaleY, 1.5);
 });
 
+test('actor-only art mappings stay searchable as portrait-only candidates', () => {
+  const mapping = {
+    'pf2e.pathfinder-bestiary': {
+      abc123: {
+        name: 'Adult Blue Dragon',
+        actor: 'modules/pf2e-tokens-draconic-codex/assets/art/adult-blue-dragon.webp',
+      },
+    },
+  };
+
+  const candidates = createMappedCandidates({ module: MODULE, mapping, sourceType: 'native' });
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].label, 'Adult Blue Dragon');
+  assert.equal(candidates[0].tokenSrc, '');
+  assert.equal(
+    candidates[0].portraitSrc,
+    'modules/pf2e-tokens-draconic-codex/assets/art/adult-blue-dragon.webp',
+  );
+  assert.deepEqual(
+    getApplyActionsForCandidate(candidates[0]).map((action) => action.action),
+    ['portrait'],
+  );
+
+  const matches = getCandidatesForTokenDocument(candidates, {
+    actor: {
+      name: 'Adult Blue Dragon',
+      flags: {
+        core: {
+          sourceId: 'Compendium.pf2e.pathfinder-bestiary.Actor.abc123',
+        },
+      },
+    },
+  });
+
+  assert.equal(matches[0].matchType, 'exact');
+  assert.equal(matches[0].portraitSrc, candidates[0].portraitSrc);
+});
+
 test('gallery datasheets normalize portrait, token, subject, and scale art', () => {
   const datasheet = [
     {
@@ -226,6 +266,34 @@ test('gallery datasheets normalize portrait, token, subject, and scale art', () 
       },
     },
   );
+});
+
+test('actor-only datasheet entries stay searchable as portrait-only candidates', () => {
+  const candidates = createDatasheetCandidates({
+    module: {
+      id: 'pf2e-tokens-characters',
+      title: 'Pathfinder Tokens: Character Gallery',
+    },
+    datasheet: [
+      {
+        label: 'Aphorite Kobold Rogue',
+        tags: {
+          ancestry: ['kobold'],
+        },
+        art: {
+          portrait: 'modules/pf2e-tokens-characters/assets/portraits/aphorite-kobold-rogue.webp',
+        },
+      },
+    ],
+  });
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].tokenSrc, '');
+  assert.equal(
+    candidates[0].portraitSrc,
+    'modules/pf2e-tokens-characters/assets/portraits/aphorite-kobold-rogue.webp',
+  );
+  assert.equal(searchCandidates(candidates, 'kobold').length, 1);
 });
 
 test('search matches gallery tags and returns matched tag chips', () => {
@@ -358,6 +426,11 @@ test('tag group search state reports matching categories and dimmed zero-match c
     isFiltering: false,
     matchedOptionCount: 2,
   });
+});
+
+test('tag list count label compares visible tags with the active category only', () => {
+  assert.equal(getTagListCountLabel(144, 144, false), '144');
+  assert.equal(getTagListCountLabel(1, 144, true), '1 / 144');
 });
 
 test('tag filter term toggles exact tag syntax inside the search query', () => {
@@ -739,6 +812,26 @@ test('folder duplicates merge into mapped art so previews keep actor images', ()
   assert.equal(candidates[0].scaleY, 2);
   assert.equal(candidates[0].subjectScale, 2);
   assert.equal(candidates[0].sourceType, 'native');
+});
+
+test('dedupe keeps portrait-only candidates instead of dropping them', () => {
+  const candidates = dedupeCandidates([
+    {
+      id: 'portrait-only',
+      label: 'Adult Blue Dragon',
+      moduleId: 'pf2e-tokens-draconic-codex',
+      moduleTitle: 'Pathfinder Tokens: Draconic Codex',
+      portraitSrc: 'modules/pf2e-tokens-draconic-codex/assets/art/adult-blue-dragon.webp',
+      searchText: 'adult blue dragon',
+      tokenSrc: '',
+    },
+  ]);
+
+  assert.equal(candidates.length, 1);
+  assert.equal(
+    candidates[0].portraitSrc,
+    'modules/pf2e-tokens-draconic-codex/assets/art/adult-blue-dragon.webp',
+  );
 });
 
 test('candidate lookup ranks exact source before same-name and broad search', () => {
@@ -1234,6 +1327,19 @@ test('Token picker ApplicationV2 uses Handlebars template parts', () => {
   );
 });
 
+test('Token picker search input starts empty instead of using the token name', () => {
+  class FakeApplicationV2 {}
+  const fakeMixin = (BaseApplication) => class FakeHandlebarsApplication extends BaseApplication {};
+  const PickerApplication = getTokenPickerApplicationClass(FakeApplicationV2, fakeMixin);
+  const app = new PickerApplication({
+    tokenDocument: {
+      actor: { name: 'Blue Dragon (Adult)' },
+    },
+  });
+
+  assert.equal(app.searchQuery, '');
+});
+
 test('Token picker source controls use delegated listeners across part re-renders', () => {
   class FakeApplicationV2 {}
   const fakeMixin = (BaseApplication) => class FakeHandlebarsApplication extends BaseApplication {};
@@ -1463,8 +1569,6 @@ test('token card typography fits compact thumbnail cells', () => {
   const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
   const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
   const labelRule = css.match(/#token-hud \.pf2e-tokener-label\s*\{[^}]+\}/)?.[0] ?? '';
-  const sourceRule =
-    [...css.matchAll(/#token-hud \.pf2e-tokener-source\s*\{[^}]+\}/g)].at(-1)?.[0] ?? '';
   const toolbarRule =
     css.match(
       /#token-hud \.pf2e-tokener-toolbar input,\s*#token-hud \.pf2e-tokener-source-button\s*\{[^}]+\}/,
@@ -1473,13 +1577,41 @@ test('token card typography fits compact thumbnail cells', () => {
   assert.match(labelRule, /font-size:\s*12px;/);
   assert.match(labelRule, /-webkit-line-clamp:\s*2;/);
   assert.match(labelRule, /white-space:\s*normal;/);
-  assert.match(sourceRule, /font-size:\s*11px;/);
   assert.match(toolbarRule, /font-size:\s*15px;/);
-  assert.match(picker, /subtitle:\s*getDefaultSearchQuery\(app\.tokenDocument\)/);
-  assert.match(template, />{{subtitle}}<\/div>/);
-  assert.match(template, /data-tooltip='{{moduleTitle}}'/);
+  assert.match(picker, /cardTooltip:\s*getCandidateCardTooltip\(candidate\)/);
+  assert.match(picker, /function getCandidateCardTooltip\(candidate\)/);
+  assert.doesNotMatch(picker, /subtitle:\s*getDefaultSearchQuery\(app\.tokenDocument\)/);
+  assert.doesNotMatch(picker, /function getDefaultSearchQuery/);
+  assert.match(template, /data-tooltip='{{cardTooltip}}'/);
+  assert.doesNotMatch(template, />{{subtitle}}<\/div>/);
+  assert.doesNotMatch(template, /data-tooltip='{{moduleTitle}}'/);
   assert.doesNotMatch(template, /\btitle=/);
   assert.doesNotMatch(template, />{{moduleTitle}}<\/div>/);
+});
+
+test('hidden current badge keeps token card labels in the visible grid row', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const badgeRules = [
+    ...css.matchAll(/(?:#token-hud|\.pf2e-tokener-app) \.pf2e-tokener-badge\s*\{[^}]+\}/g),
+  ].map((match) => match[0]);
+  const currentBadgeRules = [
+    ...css.matchAll(
+      /(?:#token-hud|\.pf2e-tokener-app) \.pf2e-tokener-card\.is-current \.pf2e-tokener-badge\s*\{[^}]+\}/g,
+    ),
+  ].map((match) => match[0]);
+
+  assert.equal(badgeRules.length, 2);
+  assert.equal(currentBadgeRules.length, 2);
+  for (const rule of badgeRules) {
+    assert.doesNotMatch(rule, /display:\s*none;/);
+    assert.match(rule, /visibility:\s*hidden;/);
+    assert.match(rule, /opacity:\s*0;/);
+  }
+  for (const rule of currentBadgeRules) {
+    assert.match(rule, /visibility:\s*visible;/);
+    assert.match(rule, /opacity:\s*1;/);
+    assert.doesNotMatch(rule, /display:\s*block;/);
+  }
 });
 
 test('token cards hide missing preview images and empty action rows', () => {
@@ -1670,12 +1802,19 @@ test('searchable tag drawer UI is rendered in the ApplicationV2 picker', () => {
   assert.match(template, /pf2e-tokener-tag-filter/);
   assert.match(template, /pf2e-tokener-tag-search/);
   assert.match(template, /pf2e-tokener-tag-list-header/);
+  assert.match(template, /{{tags.countLabel}}/);
+  assert.doesNotMatch(template, /{{tags\.visibleCount}} \/ {{tags\.totalCount}}/);
   assert.match(template, /data-tag-group=['"]{{id}}['"]/);
   assert.match(template, /data-tag-action=['"]clear['"]/);
   assert.match(template, /data-tag-id=['"]{{id}}['"]/);
   assert.match(template, /{{displayCount}}/);
   assert.match(picker, /selectedTagIds/);
   assert.match(picker, /getTagGroupSearchState\(group, tagFilter\)/);
+  assert.match(picker, /activeGroupTotal/);
+  assert.match(
+    picker,
+    /getTagListCountLabel\(visibleOptions\.length, activeGroupTotal, Boolean\(tagFilter\)\)/,
+  );
   assert.doesNotMatch(picker, /app\.searchQuery = toggleTagFilterTerm/);
   assert.match(tagBarRule, /display:\s*grid;/);
   assert.match(
@@ -1715,15 +1854,19 @@ test('image preview helper returns actor and token panes side by side', () => {
   ]);
 });
 
-test('image preview helper marks missing actor image unavailable', () => {
+test('image preview helper hides missing image panes', () => {
   const items = getImagePreviewItems({
     tokenSrc: 'token.webp',
   });
 
-  assert.equal(items[0].kind, 'actor');
-  assert.equal(items[0].available, false);
-  assert.equal(items[0].src, '');
-  assert.equal(items[1].src, 'token.webp');
+  assert.deepEqual(items, [
+    {
+      kind: 'token',
+      label: 'Token image',
+      src: 'token.webp',
+      available: true,
+    },
+  ]);
 });
 
 test('English localization file contains image preview strings', () => {
@@ -1739,10 +1882,17 @@ test('English localization file contains image preview strings', () => {
 
 test('image preview CSS is fullscreen and side by side', () => {
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const preview = fs.readFileSync(new URL('../scripts/preview.js', import.meta.url), 'utf8');
   const overlayRule = css.match(/\.pf2e-tokener-preview\s*\{[^}]+\}/)?.[0] ?? '';
   const panesRule = css.match(/\.pf2e-tokener-preview-panes\s*\{[^}]+\}/)?.[0] ?? '';
+  const hiddenPaneRule = css.match(/\.pf2e-tokener-preview-pane\.is-hidden\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.match(overlayRule, /position:\s*fixed;/);
   assert.match(overlayRule, /inset:\s*0;/);
-  assert.match(panesRule, /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.match(panesRule, /grid-template-columns:\s*repeat\(auto-fit, minmax\(320px, 1fr\)\);/);
+  assert.match(hiddenPaneRule, /display:\s*none;/);
+  assert.match(
+    preview,
+    /image\.addEventListener\('error', \(\) => pane\.classList\.add\('is-hidden'\)\)/,
+  );
 });

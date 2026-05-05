@@ -59,6 +59,10 @@ export function getTagGroupSearchState(group, query) {
   };
 }
 
+export function getTagListCountLabel(visibleCount, totalCount, isFiltering) {
+  return isFiltering ? `${visibleCount} / ${totalCount}` : String(totalCount);
+}
+
 export function isTagOptionSearchMatch(option, query) {
   const filter = normalizeSearchText(query);
   return (

@@ -41,6 +41,7 @@ export {
   clearTagFilterTerms,
   getTagGroupSearchState,
   getTagFilterOptions,
+  getTagListCountLabel,
   isTagFilterTermActive,
   isTagOptionSearchMatch,
   toggleTagFilterTerm,
