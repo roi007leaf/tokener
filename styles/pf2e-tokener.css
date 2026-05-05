@@ -113,7 +113,7 @@
   background: rgba(143, 185, 214, 0.08);
 }
 
-#token-hud .pf2e-tokener-source-option input[type="checkbox"] {
+#token-hud .pf2e-tokener-source-option input[type='checkbox'] {
   appearance: none;
   display: grid;
   place-items: center;
@@ -125,13 +125,13 @@
   border-radius: 3px;
 }
 
-#token-hud .pf2e-tokener-source-option input[type="checkbox"]:checked {
+#token-hud .pf2e-tokener-source-option input[type='checkbox']:checked {
   background: #8fb9d6;
   border-color: #8fb9d6;
 }
 
-#token-hud .pf2e-tokener-source-option input[type="checkbox"]:checked::after {
-  content: "";
+#token-hud .pf2e-tokener-source-option input[type='checkbox']:checked::after {
+  content: '';
   width: 4px;
   height: 8px;
   border: solid #11181c;
@@ -174,8 +174,8 @@
 }
 
 #token-hud .pf2e-tokener-section h4 {
-  margin: 0 0 6px;
-  font-size: 11px;
+  margin: 2px 0 8px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--color-text-light-6, #cfc6b8);
   letter-spacing: 0;
