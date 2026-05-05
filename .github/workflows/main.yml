@@ -147,20 +147,15 @@ jobs:
         run: |
           # Note that `zip` will only emit warnings when a file or directory
           # doesn't exist, it will not fail.
-          zip                                    \
-            `# Options`                          \
-            --recurse-paths                      \
-            `# The name of the output file`      \
-             ./module.zip                        \
-            `# The files that will be included.` \
-            module.json                          \
-            README.md                            \
-            CHANGELOG.md                         \
-            LICENSE                              \
-            scripts/                             \
-            templates/                           \  
-            styles/                              \
-            languages/                                \
+          zip --recurse-paths ./module.zip \
+            module.json \
+            README.md \
+            CHANGELOG.md \
+            LICENSE \
+            scripts/ \
+            templates/ \
+            styles/ \
+            languages/
           # Don't forget to add a backslash at the end of the line for any
           # additional files or directories!
       # Update the GitHub release with the manifest and module archive files.
@@ -189,4 +184,4 @@ jobs:
         uses: JamesIves/fetch-api-data-action@v2
         with:
           endpoint: https://foundryvtt.com/_api/packages/release_version/
-          configuration: '{ "method": "POST", "headers": { "Content-Type": "application/json", "Authorization": "${{ secrets.FVTT_API_TOKEN }}" }, "body": { "id": "pf2e-tokener", "dry-run": false, "release": { "version": "${{github.event.release.tag_name}}", "manifest": "https://github.com/${{github.repository}}/releases/download/${{github.event.release.tag_name}}/module.json", "notes": "https://github.com/${{github.repository}}/blob/main/CHANGELOG.md", "compatibility": { "minimum": "13", "verified": "13", "maximum": "" } } } }'
+          configuration: '{ "method": "POST", "headers": { "Content-Type": "application/json", "Authorization": "${{ secrets.FVTT_API_TOKEN }}" }, "body": { "id": "pf2e-tokener", "dry-run": false, "release": { "version": "${{github.event.release.tag_name}}", "manifest": "https://github.com/${{github.repository}}/releases/download/${{github.event.release.tag_name}}/module.json", "notes": "https://github.com/${{github.repository}}/blob/main/CHANGELOG.md", "compatibility": { "minimum": "13", "verified": "14", "maximum": "14" } } } }'
