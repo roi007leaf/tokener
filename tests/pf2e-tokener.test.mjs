@@ -1467,6 +1467,19 @@ test('module manifest declares English localization file', () => {
   ]);
 });
 
+test('release archive zip command has valid shell continuations', () => {
+  const workflow = fs.readFileSync(
+    new URL('../.github/workflows/main.yml', import.meta.url),
+    'utf8',
+  );
+  const lines = workflow.split(/\r?\n/);
+
+  assert.equal(lines.filter((line) => /\\\s+$/.test(line)).length, 0);
+  assert.match(workflow, /\sstyles\/\s*\\$/m);
+  assert.match(workflow, /\slanguages\/\s*$/m);
+  assert.match(workflow, /"compatibility": \{ "minimum": "13", "verified": "14", "maximum": "14" \}/);
+});
+
 test('English localization file contains Token HUD strings', () => {
   const translations = JSON.parse(
     fs.readFileSync(new URL('../languages/en.json', import.meta.url), 'utf8'),
