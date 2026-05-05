@@ -1,0 +1,23 @@
+{
+  "PF2ETokener.HUD.Tooltip": "PF2e Tokener",
+  "PF2ETokener.HUD.SearchPlaceholder": "Search tokens",
+  "PF2ETokener.HUD.Indexing": "Indexing token art...",
+  "PF2ETokener.HUD.AllSources": "All sources",
+  "PF2ETokener.HUD.SourcesSelected": "{count} sources",
+  "PF2ETokener.HUD.SelectAllSources": "Select all",
+  "PF2ETokener.HUD.ClearSources": "Clear",
+  "PF2ETokener.HUD.NoTokenArt": "No token art found.",
+  "PF2ETokener.HUD.BestMatches": "Best matches",
+  "PF2ETokener.HUD.SearchResults": "Search results",
+  "PF2ETokener.HUD.Current": "Current",
+  "PF2ETokener.Actions.Token": "Token",
+  "PF2ETokener.Actions.Actor": "Actor",
+  "PF2ETokener.Actions.Portrait": "Portrait",
+  "PF2ETokener.Actions.Both": "Both",
+  "PF2ETokener.Preview.ActorImage": "Actor image",
+  "PF2ETokener.Preview.TokenImage": "Token image",
+  "PF2ETokener.Preview.Close": "Close preview",
+  "PF2ETokener.Preview.ActorUnavailable": "No actor image available.",
+  "PF2ETokener.Notifications.Applied": "PF2e Tokener: token art applied.",
+  "PF2ETokener.Notifications.ApplyFailed": "PF2e Tokener: failed to apply token art."
+}

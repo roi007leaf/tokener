@@ -1,0 +1,46 @@
+{
+  "id": "pf2e-tokener",
+  "title": "PF2e Tokener",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "14",
+    "maximum": "14"
+  },
+  "esmodules": [
+    "scripts/pf2e-tokener.js"
+  ],
+  "styles": [
+    "styles/pf2e-tokener.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "languages/en.json"
+    }
+  ],
+  "authors": [
+    {
+      "name": "RoiLeaf",
+      "flags": {}
+    }
+  ],
+  "flags": {
+    "canUpload": true
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system",
+        "compatibility": {
+          "minimum": "7.0.0",
+          "verified": "8.1.1"
+        }
+      }
+    ]
+  },
+  "action": "manageModule",
+  "description": "Adds a searchable Token HUD picker for quickly switching PF2e token art from installed token modules."
+}
