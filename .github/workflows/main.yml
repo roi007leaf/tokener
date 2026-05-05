@@ -158,6 +158,7 @@ jobs:
             CHANGELOG.md                         \
             LICENSE                              \
             scripts/                             \
+            templates/                           \  
             styles/                              \
             languages/                                \
           # Don't forget to add a backslash at the end of the line for any

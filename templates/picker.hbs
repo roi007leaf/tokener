@@ -1,0 +1,193 @@
+<section class='pf2e-tokener-panel'>
+  <div class='pf2e-tokener-toolbar'>
+    <input
+      class='pf2e-tokener-search'
+      type='search'
+      value='{{searchQuery}}'
+      placeholder='{{searchPlaceholder}}'
+    />
+
+    <div class='{{source.className}}'>
+      <button
+        class='pf2e-tokener-source-button'
+        type='button'
+        aria-haspopup='true'
+        aria-expanded='{{source.expanded}}'
+      >{{source.label}}</button>
+    </div>
+
+    <span class='pf2e-tokener-count'>{{count}}</span>
+  </div>
+
+  <div class='{{source.menuClassName}}'>
+    <input
+      class='pf2e-tokener-source-search'
+      type='search'
+      value='{{source.filterQuery}}'
+      placeholder='{{source.searchPlaceholder}}'
+    />
+
+    {{#if source.controls}}
+      <div class='pf2e-tokener-source-controls'>
+        <button type='button' data-source-action='all'>{{source.selectAllLabel}}</button>
+        <button type='button' data-source-action='clear'>{{source.clearLabel}}</button>
+      </div>
+    {{/if}}
+
+    {{#each source.options}}
+      <button
+        class='{{className}}'
+        type='button'
+        data-source-id='{{id}}'
+        aria-pressed='{{ariaPressed}}'
+      >
+        <span class='pf2e-tokener-source-check' aria-hidden='true'></span>
+        <span
+          class='pf2e-tokener-source-title'
+          data-tooltip='{{title}}'
+          data-tooltip-direction='UP'
+        >{{title}}</span>
+        <span class='pf2e-tokener-source-option-count'>{{count}}</span>
+      </button>
+    {{/each}}
+  </div>
+
+  <div class='{{tags.className}}'>
+    <div class='pf2e-tokener-tag-summary'>
+      <button
+        class='pf2e-tokener-tag-filter-button'
+        type='button'
+        aria-haspopup='true'
+        aria-expanded='{{tags.expanded}}'
+      >{{tags.buttonLabel}}</button>
+
+      <div class='pf2e-tokener-active-tags'>
+        {{#each tags.active}}
+          <button
+            class='pf2e-tokener-active-tag'
+            type='button'
+            data-tag-id='{{id}}'
+            data-tooltip='{{group}}: {{value}}'
+            data-tooltip-direction='UP'
+          >{{label}}</button>
+        {{/each}}
+      </div>
+
+      {{#if tags.hasActive}}
+        <button
+          class='pf2e-tokener-clear-tags'
+          type='button'
+          data-tag-action='clear'
+        >{{tags.clearLabel}}</button>
+      {{/if}}
+    </div>
+
+    <div class='pf2e-tokener-tag-drawer'>
+      <input
+        class='pf2e-tokener-tag-search'
+        type='search'
+        value='{{tags.filterQuery}}'
+        placeholder='{{tags.searchPlaceholder}}'
+      />
+
+      <div class='pf2e-tokener-tag-groups'>
+        {{#each tags.groups}}
+          <button
+            class='{{className}}'
+            type='button'
+            data-tag-group='{{id}}'
+            aria-pressed='{{ariaPressed}}'
+          >
+            <span>{{label}}</span>
+            <span class='pf2e-tokener-tag-count'>{{displayCount}}</span>
+          </button>
+        {{/each}}
+      </div>
+
+      <div class='pf2e-tokener-tag-list'>
+        <div class='pf2e-tokener-tag-list-header'>
+          <span>{{tags.activeGroupLabel}}</span>
+          <span>{{tags.visibleCount}} / {{tags.totalCount}}</span>
+        </div>
+
+        <div class='pf2e-tokener-tag-options'>
+          {{#each tags.visibleOptions}}
+            <button
+              class='{{className}}'
+              type='button'
+              data-tag-id='{{id}}'
+              aria-pressed='{{ariaPressed}}'
+              data-tooltip='{{group}}: {{value}}'
+              data-tooltip-direction='UP'
+            >
+              <span>{{label}}</span>
+              <span class='pf2e-tokener-tag-count'>{{count}}</span>
+            </button>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class='pf2e-tokener-content'>
+    {{#if hasResults}}
+      {{#each sections}}
+        <section class='pf2e-tokener-section'>
+          <h4>{{title}}</h4>
+          <div class='pf2e-tokener-grid'>
+            {{#each candidates}}
+              <article class='{{className}}' tabindex='{{tabIndex}}' data-candidate-id='{{viewId}}'>
+                {{#if previewSrc}}
+                  <img
+                    loading='lazy'
+                    src='{{previewSrc}}'
+                    data-preview-src='{{previewSrc}}'
+                    alt=''
+                  />
+                {{/if}}
+                <div class='pf2e-tokener-badge'>{{currentLabel}}</div>
+                <div
+                  class='pf2e-tokener-label'
+                  data-tooltip='{{label}}'
+                  data-tooltip-direction='UP'
+                >{{label}}</div>
+                <div
+                  class='pf2e-tokener-source'
+                  data-tooltip='{{moduleTitle}}'
+                  data-tooltip-direction='UP'
+                >{{subtitle}}</div>
+
+                {{#if hasMatchedTags}}
+                  <div class='pf2e-tokener-tags'>
+                    {{#each matchedTags}}
+                      <span
+                        class='pf2e-tokener-tag'
+                        data-tooltip='{{group}}: {{value}}'
+                        data-tooltip-direction='UP'
+                      >{{value}}</span>
+                    {{/each}}
+                  </div>
+                {{/if}}
+
+                {{#if hasActions}}
+                  <div class='pf2e-tokener-actions'>
+                    {{#each actions}}
+                      <button
+                        type='button'
+                        data-apply-action='{{action}}'
+                        data-tooltip='{{tooltip}}'
+                        data-tooltip-direction='UP'
+                      >{{label}}</button>
+                    {{/each}}
+                  </div>
+                {{/if}}
+              </article>
+            {{/each}}
+          </div>
+        </section>
+      {{/each}}
+    {{else}}
+      <div class='pf2e-tokener-state'>{{emptyMessage}}</div>
+    {{/if}}
+  </div>
+</section>

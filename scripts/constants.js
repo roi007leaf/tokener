@@ -1,0 +1,13 @@
+export const MODULE_ID = 'pf2e-tokener';
+export const DEFAULT_LIMIT = 120;
+export const TOKEN_FOLDER_ROOTS = ['resources/tokens', 'assets/tokens', 'tokens'];
+export const PORTRAIT_FOLDER_ROOTS = [
+  'resources/art',
+  'resources/portraits',
+  'assets/art',
+  'assets/portraits',
+  'art',
+  'portraits',
+];
+export const SUBJECT_FOLDER_ROOTS = ['resources/subjects', 'assets/subjects', 'subjects'];
+export const IMAGE_EXTENSIONS = /\.(avif|webp|png|jpe?g|gif)$/i;

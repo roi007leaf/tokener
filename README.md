@@ -2,11 +2,11 @@
 
 PF2e Tokener adds a fast token image picker to the Foundry VTT Token HUD for Pathfinder Second Edition.
 
-When you select a token, open its HUD, and click the PF2e Tokener button, you get a searchable gallery of token art from your enabled token modules. Pick an image, choose what to update, and keep playing.
+When you select a token, open its HUD, and click the PF2e Tokener button, you get a searchable gallery of token art from your enabled token modules. The gallery opens as a Foundry window, so it stays in place while you pan or zoom the canvas. Pick an image, choose what to update, and keep playing.
 
 ## Who This Is For
 
-PF2e Tokener is mainly for GMs who use several PF2e token art modules and want a quicker way to swap token art during prep or play.
+PF2e Tokener is for GMs who use several PF2e token art modules and want a quicker way to swap token art during prep or play.
 
 Use it when you want to:
 
@@ -102,7 +102,24 @@ You can search by:
 - NPC name
 - token filename
 - token module name
+- tags from supported galleries, such as ancestry, equipment, family, category, or features
 - broad terms such as `dragon`, `kobold`, or `guard`
+
+Some gallery modules include tags. For example, a search like `human sword warrior` can find art tagged with those ideas even when they are not all in the character name.
+
+Use the `Tags` button under the search bar to browse available tags. Tags are grouped by category, such as ancestry, equipment, family, features, and special traits. The tag browser has its own search box, so you can quickly narrow a long list of tags without changing your main token search.
+
+Selecting a tag filters the results without changing the text in the main search box. Active tags appear as small chips and can be removed one at a time or cleared together.
+
+You can also use direct tag searches:
+
+- `ancestry:human`
+- `equipment:sword`
+- `family:warrior`
+- `category:humanoid`
+- `tag:magic`
+
+When a tag helped match a result, PF2e Tokener shows the matched tags as small chips on that result.
 
 Best matches appear first. Broader results appear below them.
 
@@ -115,7 +132,8 @@ You can:
 - search all sources
 - pick one source
 - pick several sources
-- clear the selection to return to all sources
+- clear all sources
+- select all sources again
 
 This is useful when several modules include similar creatures.
 
@@ -123,9 +141,9 @@ This is useful when several modules include similar creatures.
 
 If a result already matches the selected token's current image, it is marked as current.
 
-## Canvas Zoom
+## Canvas Pan And Zoom
 
-The picker adjusts to your canvas zoom so it stays usable while you are zoomed in or out.
+The picker opens in its own Foundry window. It does not disappear when the canvas pans, and it stays readable while the canvas zoom changes.
 
 ## Troubleshooting
 

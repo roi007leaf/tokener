@@ -7,12 +7,20 @@ import {
   buildTokenUpdate,
   getCanvasZoom,
   getApplyActions,
+  getApplyActionsForCandidate,
   getApplyTargets,
+  getCandidatePreviewSources,
   getImagePreviewItems,
   getPanelZoomData,
   getPanelSourceFilterOptions,
   getSourceFilterLabel,
   getSourceFilterOptions,
+  filterSourceOptionsByQuery,
+  getTagGroupSearchState,
+  getTagFilterOptions,
+  buildCandidateSearchQuery,
+  getTokenPickerApplicationClass,
+  rebuildIndex,
   createDatasheetCandidates,
   createFolderCandidates,
   createMappedCandidates,
@@ -21,14 +29,50 @@ import {
   getCandidatesForTokenDocument,
   localize,
   normalizeHudElement,
+  renderTokenHud,
   setTextTooltip,
   searchCandidates,
+  state,
+  toggleTagFilterTerm,
 } from '../scripts/pf2e-tokener.js';
 
 const MODULE = {
   id: 'pf2e-tokens-draconic-codex',
   title: 'Pathfinder Tokens: Draconic Codex',
 };
+
+function createFakeElement() {
+  return {
+    children: [],
+    className: '',
+    dataset: {},
+    innerHTML: '',
+    listeners: {},
+    nodeType: 1,
+    append(...children) {
+      this.children.push(...children);
+    },
+    addEventListener(type, listener) {
+      this.listeners[type] = listener;
+    },
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    remove() {
+      this.removed = true;
+    },
+  };
+}
+
+function createFakeHudRoot() {
+  const root = createFakeElement();
+  const target = createFakeElement();
+  root.querySelector = (selector) => (selector === '.col.right' ? target : null);
+  return { root, target };
+}
 
 test('native compendiumArtMappings become searchable token candidates', () => {
   const mapping = {
@@ -127,6 +171,12 @@ test('gallery datasheets normalize portrait, token, subject, and scale art', () 
     {
       label: 'Aphorite Kobold Rogue',
       key: 'aphorite-kobold-rogue',
+      tags: {
+        ancestry: ['kobold', 'aphorite'],
+        category: ['humanoid'],
+        equipment: ['dagger'],
+        family: ['outcast'],
+      },
       art: {
         portrait: 'modules/pf2e-tokens-characters/assets/portraits/aphorite-kobold-rogue.webp',
         token: 'modules/pf2e-tokens-characters/assets/tokens/aphorite-kobold-rogue.webp',
@@ -156,6 +206,7 @@ test('gallery datasheets normalize portrait, token, subject, and scale art', () 
       scaleY: candidates[0].scaleY,
       subjectScale: candidates[0].subjectScale,
       sourceType: candidates[0].sourceType,
+      tags: candidates[0].tags,
     },
     {
       label: 'Aphorite Kobold Rogue',
@@ -167,8 +218,429 @@ test('gallery datasheets normalize portrait, token, subject, and scale art', () 
       scaleY: 1,
       subjectScale: 1,
       sourceType: 'datasheet',
+      tags: {
+        ancestry: ['kobold', 'aphorite'],
+        category: ['humanoid'],
+        equipment: ['dagger'],
+        family: ['outcast'],
+      },
     },
   );
+});
+
+test('search matches gallery tags and returns matched tag chips', () => {
+  const candidates = createDatasheetCandidates({
+    module: {
+      id: 'pf2e-tokens-characters',
+      title: 'Pathfinder Tokens: Character Gallery',
+    },
+    datasheet: [
+      {
+        label: 'Aldori Swordlord',
+        tags: {
+          ancestry: ['human'],
+          category: ['humanoid'],
+          equipment: ['clothing', 'sword'],
+          family: ['civilian', 'warrior', 'affluent'],
+        },
+        art: {
+          token: 'modules/pf2e-tokens-characters/assets/tokens/aldori-swordlord.webp',
+        },
+      },
+      {
+        label: 'Maagambyan Student',
+        tags: {
+          ancestry: ['human'],
+          category: ['humanoid'],
+          equipment: ['clothing', 'focus'],
+          features: ['magic'],
+          family: ['civilian', 'sage', 'artisan'],
+        },
+        art: {
+          token: 'modules/pf2e-tokens-characters/assets/tokens/maagambyan-student.webp',
+        },
+      },
+    ],
+  });
+
+  const broad = searchCandidates(candidates, 'human sword warrior');
+  assert.equal(broad.length, 1);
+  assert.equal(broad[0].label, 'Aldori Swordlord');
+  assert.deepEqual(
+    broad[0].matchedTags.map((tag) => `${tag.group}:${tag.value}`),
+    ['ancestry:human', 'equipment:sword', 'family:warrior'],
+  );
+
+  assert.deepEqual(
+    searchCandidates(candidates, 'ancestry:human equipment:focus').map(
+      (candidate) => candidate.label,
+    ),
+    ['Maagambyan Student'],
+  );
+  assert.deepEqual(
+    searchCandidates(candidates, 'tag:magic').map((candidate) => candidate.label),
+    ['Maagambyan Student'],
+  );
+  assert.deepEqual(searchCandidates(candidates, 'equipment:shield'), []);
+});
+
+test('tag filter options summarize visible gallery tags by group and count', () => {
+  const options = getTagFilterOptions([
+    {
+      tags: {
+        ancestry: ['human'],
+        equipment: ['sword', 'clothing'],
+        family: ['warrior'],
+      },
+    },
+    {
+      tags: {
+        ancestry: ['human'],
+        equipment: ['focus', 'clothing'],
+        features: ['magic'],
+      },
+    },
+  ]);
+
+  assert.deepEqual(options.slice(0, 5), [
+    { id: 'ancestry:human', group: 'ancestry', value: 'human', count: 2, label: 'Human' },
+    {
+      id: 'equipment:clothing',
+      group: 'equipment',
+      value: 'clothing',
+      count: 2,
+      label: 'Clothing',
+    },
+    { id: 'equipment:focus', group: 'equipment', value: 'focus', count: 1, label: 'Focus' },
+    { id: 'equipment:sword', group: 'equipment', value: 'sword', count: 1, label: 'Sword' },
+    { id: 'family:warrior', group: 'family', value: 'warrior', count: 1, label: 'Warrior' },
+  ]);
+});
+
+test('tag filter options keep every source-scoped datasheet tag without a global cap', () => {
+  const candidates = Array.from({ length: 80 }, (_, index) => ({
+    tags: {
+      equipment: [`tool-${index}`],
+    },
+  }));
+
+  const options = getTagFilterOptions(candidates);
+
+  assert.equal(options.length, 80);
+  assert.ok(options.some((option) => option.id === 'equipment:tool-79'));
+});
+
+test('tag group search state reports matching categories and dimmed zero-match categories', () => {
+  const ancestry = {
+    id: 'ancestry',
+    options: [
+      { label: 'Human', value: 'human' },
+      { label: 'Dwarf', value: 'dwarf' },
+    ],
+  };
+  const equipment = {
+    id: 'equipment',
+    options: [{ label: 'Clothing', value: 'clothing' }],
+  };
+
+  assert.deepEqual(getTagGroupSearchState(ancestry, 'hum'), {
+    hasMatches: true,
+    isFiltering: true,
+    matchedOptionCount: 1,
+  });
+  assert.deepEqual(getTagGroupSearchState(equipment, 'hum'), {
+    hasMatches: false,
+    isFiltering: true,
+    matchedOptionCount: 0,
+  });
+  assert.deepEqual(getTagGroupSearchState(ancestry, ''), {
+    hasMatches: true,
+    isFiltering: false,
+    matchedOptionCount: 2,
+  });
+});
+
+test('tag filter term toggles exact tag syntax inside the search query', () => {
+  const tag = { group: 'equipment', value: 'sword' };
+
+  assert.equal(toggleTagFilterTerm('dragon', tag), 'dragon equipment:sword');
+  assert.equal(toggleTagFilterTerm('dragon equipment:sword', tag), 'dragon');
+  assert.equal(toggleTagFilterTerm('equipment:sword dragon', tag), 'dragon');
+});
+
+test('tag filter terms encode multi-word values for exact tag search', () => {
+  const candidates = createDatasheetCandidates({
+    module: MODULE,
+    datasheet: [
+      {
+        label: 'Sword Guard',
+        tags: {
+          equipment: ['long sword'],
+        },
+        art: {
+          token: 'modules/pf2e-tokens-test/assets/tokens/sword-guard.webp',
+        },
+      },
+    ],
+  });
+  const [tag] = getTagFilterOptions(candidates);
+
+  assert.equal(tag.id, 'equipment:long-sword');
+  assert.equal(toggleTagFilterTerm('', tag), 'equipment:long-sword');
+  assert.deepEqual(
+    searchCandidates(candidates, 'equipment:long-sword').map((candidate) => candidate.label),
+    ['Sword Guard'],
+  );
+});
+
+test('selected tag chips compose hidden candidate query without changing visible search text', () => {
+  const query = buildCandidateSearchQuery('Blue Dragon', ['ancestry:human', 'category:humanoid']);
+
+  assert.equal(query, 'Blue Dragon ancestry:human category:humanoid');
+});
+
+test('tag clear helper removes all known exact tag terms from search query', async () => {
+  const tags = await import('../scripts/tags.js');
+  const options = [
+    { group: 'equipment', value: 'sword' },
+    { group: 'category', value: 'dragon' },
+  ];
+
+  assert.equal(tags.clearTagFilterTerms('blue equipment:sword category:dragon', options), 'blue');
+});
+
+test('Foundry index discovers datasheet tags from token module datasheet folders', async () => {
+  const previousGame = globalThis.game;
+  const previousFoundry = globalThis.foundry;
+  state.index = [];
+  state.errors = [];
+  state.indexing = null;
+
+  const browseCalls = [];
+  globalThis.game = {
+    modules: new Map([
+      [
+        'pf2e-tokens-extra',
+        {
+          id: 'pf2e-tokens-extra',
+          title: 'Pathfinder Tokens: Extra',
+          flags: {},
+        },
+      ],
+    ]),
+  };
+  globalThis.foundry = {
+    applications: {
+      apps: {
+        FilePicker: {
+          implementation: {
+            browse: async (_source, target, options) => {
+              browseCalls.push({ target, recursive: options?.recursive });
+              if (target === 'modules/pf2e-tokens-extra/assets/datasheet') {
+                return {
+                  files: ['modules/pf2e-tokens-extra/assets/datasheet/datasheet.json'],
+                };
+              }
+              return { files: [] };
+            },
+          },
+        },
+      },
+    },
+    utils: {
+      fetchJsonWithTimeout: async (path) => {
+        assert.equal(path, 'modules/pf2e-tokens-extra/assets/datasheet/datasheet.json');
+        return [
+          {
+            label: 'Angel Scout',
+            art: {
+              token: 'modules/pf2e-tokens-extra/assets/token/angel-scout.webp',
+            },
+            tags: {
+              ancestry: ['angel'],
+              category: ['divine'],
+              features: ['winged'],
+            },
+          },
+        ];
+      },
+    },
+  };
+
+  try {
+    const index = await rebuildIndex();
+
+    assert.equal(index.length, 1);
+    assert.equal(index[0].label, 'Angel Scout');
+    assert.deepEqual(index[0].tags, {
+      ancestry: ['angel'],
+      category: ['divine'],
+      features: ['winged'],
+    });
+    assert.ok(
+      browseCalls.some(
+        (call) =>
+          call.target === 'modules/pf2e-tokens-extra/assets/datasheet' && call.recursive === true,
+      ),
+    );
+  } finally {
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    state.index = [];
+    state.errors = [];
+    state.indexing = null;
+  }
+});
+
+test('Foundry index folder-scans active modules by evidence instead of token-like names', async () => {
+  const previousGame = globalThis.game;
+  const previousFoundry = globalThis.foundry;
+  state.index = [];
+  state.errors = [];
+  state.indexing = null;
+
+  const browseCalls = [];
+  globalThis.game = {
+    modules: new Map([
+      [
+        'drakkenheim-monsters',
+        {
+          id: 'drakkenheim-monsters',
+          title: 'Drakkenheim Monsters',
+          flags: {},
+        },
+      ],
+      [
+        'utility-tools',
+        {
+          id: 'utility-tools',
+          title: 'Utility Tools',
+          flags: {},
+        },
+      ],
+    ]),
+  };
+  globalThis.foundry = {
+    applications: {
+      apps: {
+        FilePicker: {
+          implementation: {
+            browse: async (_source, target, options) => {
+              browseCalls.push({ target, recursive: options?.recursive });
+              if (target === 'modules/drakkenheim-monsters/assets/tokens') {
+                return {
+                  files: ['modules/drakkenheim-monsters/assets/tokens/contaminated-ogre.webp'],
+                };
+              }
+              return { files: [] };
+            },
+          },
+        },
+      },
+    },
+  };
+
+  try {
+    const index = await rebuildIndex();
+
+    assert.deepEqual(
+      index.map((candidate) => ({
+        label: candidate.label,
+        moduleId: candidate.moduleId,
+        tokenSrc: candidate.tokenSrc,
+      })),
+      [
+        {
+          label: 'Contaminated Ogre',
+          moduleId: 'drakkenheim-monsters',
+          tokenSrc: 'modules/drakkenheim-monsters/assets/tokens/contaminated-ogre.webp',
+        },
+      ],
+    );
+    assert.ok(browseCalls.some((call) => call.target === 'modules/utility-tools/assets/tokens'));
+  } finally {
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    state.index = [];
+    state.errors = [];
+    state.indexing = null;
+  }
+});
+
+test('Foundry index discovers datasheets from monster and adventure modules', async () => {
+  const previousGame = globalThis.game;
+  const previousFoundry = globalThis.foundry;
+  state.index = [];
+  state.errors = [];
+  state.indexing = null;
+
+  globalThis.game = {
+    modules: new Map([
+      [
+        'drakkenheim-monsters',
+        {
+          id: 'drakkenheim-monsters',
+          title: 'Drakkenheim Monsters',
+          flags: {},
+        },
+      ],
+    ]),
+  };
+  globalThis.foundry = {
+    applications: {
+      apps: {
+        FilePicker: {
+          implementation: {
+            browse: async (_source, target) => {
+              if (target === 'modules/drakkenheim-monsters/data') {
+                return {
+                  files: ['modules/drakkenheim-monsters/data/monster-datasheet.json'],
+                };
+              }
+              return { files: [] };
+            },
+          },
+        },
+      },
+    },
+    utils: {
+      fetchJsonWithTimeout: async (path) => {
+        assert.equal(path, 'modules/drakkenheim-monsters/data/monster-datasheet.json');
+        return [
+          {
+            label: 'Haze Hulk',
+            art: {
+              token: 'modules/drakkenheim-monsters/assets/tokens/haze-hulk.webp',
+            },
+            tags: {
+              category: ['monster'],
+            },
+          },
+        ];
+      },
+    },
+  };
+
+  try {
+    const index = await rebuildIndex();
+
+    assert.equal(index.length, 1);
+    assert.equal(index[0].label, 'Haze Hulk');
+    assert.equal(index[0].sourceType, 'datasheet');
+    assert.deepEqual(index[0].tags, { category: ['monster'] });
+  } finally {
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    state.index = [];
+    state.errors = [];
+    state.indexing = null;
+  }
 });
 
 test('folder candidates only include token-looking image files', () => {
@@ -383,6 +855,28 @@ test('source filter options are unique sorted modules with counts', () => {
   ]);
 });
 
+test('source search filters source options by normalized source title', () => {
+  const options = [
+    { id: 'bestiary', title: 'Pathfinder Tokens: Bestiaries', count: 10 },
+    { id: 'draconic', title: 'Pathfinder Tokens: Draconic Codex', count: 2 },
+    { id: 'npc-core', title: 'Pathfinder Tokens: NPC Core', count: 7 },
+  ];
+
+  assert.deepEqual(
+    filterSourceOptionsByQuery(options, '').map((option) => option.id),
+    ['bestiary', 'draconic', 'npc-core'],
+  );
+  assert.deepEqual(
+    filterSourceOptionsByQuery(options, 'draconic').map((option) => option.id),
+    ['draconic'],
+  );
+  assert.deepEqual(
+    filterSourceOptionsByQuery(options, 'tokens npc').map((option) => option.id),
+    ['npc-core'],
+  );
+  assert.deepEqual(filterSourceOptionsByQuery(options, 'missing'), []);
+});
+
 test('panel source filter options use full index instead of selected token candidates', () => {
   const index = [
     {
@@ -438,7 +932,7 @@ test('panel source filter options use full index instead of selected token candi
 });
 
 test('HUD source menu is built from full index', () => {
-  const script = fs.readFileSync(new URL('../scripts/pf2e-tokener.js', import.meta.url), 'utf8');
+  const script = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
 
   assert.match(script, /const sourceOptions = getPanelSourceFilterOptions\(index\);/);
   assert.doesNotMatch(
@@ -447,7 +941,7 @@ test('HUD source menu is built from full index', () => {
   );
 });
 
-test('source filter accepts multiple selected modules and treats empty as all', () => {
+test('source filter accepts multiple selected modules and can treat empty as none for HUD clear all', () => {
   const candidates = [
     { id: 'a', moduleId: 'bestiary' },
     { id: 'b', moduleId: 'draconic' },
@@ -464,9 +958,15 @@ test('source filter accepts multiple selected modules and treats empty as all', 
     ),
     ['a', 'c'],
   );
+  assert.deepEqual(
+    filterCandidatesBySources(candidates, [], { emptyMeansAll: false }).map(
+      (candidate) => candidate.id,
+    ),
+    [],
+  );
 });
 
-test('source filter label summarizes all, one, or multiple selected sources', () => {
+test('source filter label summarizes all, none, one, or multiple selected sources', () => {
   const options = [
     { id: 'bestiary', title: 'Bestiary Tokens', count: 8 },
     { id: 'draconic', title: 'Draconic Codex', count: 3 },
@@ -474,8 +974,13 @@ test('source filter label summarizes all, one, or multiple selected sources', ()
   ];
 
   assert.equal(getSourceFilterLabel(options, []), 'All sources');
+  assert.equal(getSourceFilterLabel(options, [], { emptyMeansAll: false }), 'No sources');
   assert.equal(getSourceFilterLabel(options, ['draconic']), 'Draconic Codex');
   assert.equal(getSourceFilterLabel(options, ['bestiary', 'npc-core']), '2 sources');
+  assert.equal(
+    getSourceFilterLabel(options, ['bestiary', 'draconic', 'npc-core'], { emptyMeansAll: false }),
+    'All sources',
+  );
 });
 
 test('token update preserves dynamic ring fields when subject art exists', () => {
@@ -553,6 +1058,47 @@ test('HUD apply actions include user-facing tooltips', () => {
   );
 });
 
+test('candidate apply actions only show buttons backed by usable image data', () => {
+  assert.deepEqual(
+    getApplyActionsForCandidate({ tokenSrc: 'token.webp', portraitSrc: 'portrait.webp' }).map(
+      (action) => action.action,
+    ),
+    ['token', 'actor', 'portrait', 'both'],
+  );
+  assert.deepEqual(
+    getApplyActionsForCandidate({ tokenSrc: 'token.webp' }).map((action) => action.action),
+    ['token', 'actor', 'portrait', 'both'],
+  );
+  assert.deepEqual(
+    getApplyActionsForCandidate({ portraitSrc: 'portrait.webp' }).map((action) => action.action),
+    ['portrait'],
+  );
+  assert.deepEqual(
+    getApplyActionsForCandidate({}).map((action) => action.action),
+    [],
+  );
+});
+
+test('candidate preview sources fall back across token, portrait, and subject art', () => {
+  assert.deepEqual(
+    getCandidatePreviewSources({
+      tokenSrc: 'token.webp',
+      portraitSrc: 'portrait.webp',
+      subjectSrc: 'subject.webp',
+    }),
+    ['token.webp', 'portrait.webp', 'subject.webp'],
+  );
+  assert.deepEqual(
+    getCandidatePreviewSources({
+      tokenSrc: 'shared.webp',
+      portraitSrc: 'shared.webp',
+      subjectSrc: 'subject.webp',
+    }),
+    ['shared.webp', 'subject.webp'],
+  );
+  assert.deepEqual(getCandidatePreviewSources({}), []);
+});
+
 test('apply target helper keeps Actor separate from selected Token', () => {
   assert.deepEqual(getApplyTargets('token'), { token: true, actor: false, portrait: false });
   assert.deepEqual(getApplyTargets('actor'), { token: false, actor: true, portrait: false });
@@ -565,6 +1111,242 @@ test('HUD adapter accepts HTMLElement and jQuery-like wrappers', () => {
   assert.equal(normalizeHudElement(element), element);
   assert.equal(normalizeHudElement([element]), element);
   assert.equal(normalizeHudElement({ 0: element, length: 1 }), element);
+});
+
+test('Token HUD button stays hidden for players even when they own the token actor', () => {
+  const previousDocument = globalThis.document;
+  const previousGame = globalThis.game;
+  const { root, target } = createFakeHudRoot();
+
+  try {
+    globalThis.document = { createElement: createFakeElement };
+    globalThis.game = { user: { id: 'player1', isGM: false } };
+
+    renderTokenHud(
+      {
+        object: {
+          document: {
+            actor: {
+              testUserPermission: (user, level) => user.id === 'player1' && level === 'OWNER',
+            },
+            canUserModify: () => false,
+          },
+        },
+      },
+      root,
+    );
+
+    assert.equal(
+      target.children.some((child) => child.className.includes('pf2e-tokener-button')),
+      false,
+    );
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.game = previousGame;
+  }
+});
+
+test('GM Token HUD button opens ApplicationV2 picker instead of HUD child panel', async () => {
+  const previousDocument = globalThis.document;
+  const previousFoundry = globalThis.foundry;
+  const previousGame = globalThis.game;
+  const { root, target } = createFakeHudRoot();
+  const tokenDocument = {
+    actor: { testUserPermission: () => true },
+    canUserModify: () => true,
+  };
+  const instances = [];
+  let mixinCalled = false;
+
+  class FakeApplicationV2 {
+    constructor(options) {
+      this.options = options;
+      instances.push(this);
+    }
+
+    render(force) {
+      this.force = force;
+      return Promise.resolve(this);
+    }
+  }
+
+  const fakeMixin = (BaseApplication) => {
+    mixinCalled = true;
+    return class FakeHandlebarsApplication extends BaseApplication {};
+  };
+
+  try {
+    globalThis.document = { createElement: createFakeElement };
+    globalThis.foundry = {
+      applications: {
+        api: {
+          ApplicationV2: FakeApplicationV2,
+          HandlebarsApplicationMixin: fakeMixin,
+        },
+      },
+    };
+    globalThis.game = { user: { id: 'gm1', isGM: true } };
+
+    renderTokenHud({ object: { document: tokenDocument } }, root);
+    const button = target.children.find((child) => child.className.includes('pf2e-tokener-button'));
+    await button.listeners.click({
+      preventDefault() {},
+      stopPropagation() {},
+    });
+
+    assert.equal(instances.length, 1);
+    assert.equal(mixinCalled, true);
+    assert.equal(instances[0].tokenDocument, tokenDocument);
+    assert.equal(instances[0].force, true);
+    assert.equal(
+      root.children.some((child) => child.className.includes('pf2e-tokener-panel')),
+      false,
+    );
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.foundry = previousFoundry;
+    globalThis.game = previousGame;
+  }
+});
+
+test('Token picker ApplicationV2 uses Handlebars template parts', () => {
+  let mixinCalled = false;
+  class FakeApplicationV2 {}
+  const fakeMixin = (BaseApplication) => {
+    mixinCalled = true;
+    return class FakeHandlebarsApplication extends BaseApplication {};
+  };
+
+  const PickerApplication = getTokenPickerApplicationClass(FakeApplicationV2, fakeMixin);
+
+  assert.equal(mixinCalled, true);
+  assert.equal(PickerApplication.PARTS.main.template, 'modules/pf2e-tokener/templates/picker.hbs');
+  assert.match(PickerApplication.prototype._prepareContext.toString(), /preparePickerContext/);
+  assert.match(PickerApplication.prototype._onRender.toString(), /activatePickerListeners/);
+  assert.equal(typeof PickerApplication.prototype._attachPartListeners, 'function');
+  assert.match(
+    PickerApplication.prototype._attachPartListeners.toString(),
+    /activatePickerListeners\(this, html\)/,
+  );
+  assert.match(
+    fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8'),
+    /dataset\.pf2eTokenerBound/,
+  );
+});
+
+test('Token picker source controls use delegated listeners across part re-renders', () => {
+  class FakeApplicationV2 {}
+  const fakeMixin = (BaseApplication) => class FakeHandlebarsApplication extends BaseApplication {};
+  const PickerApplication = getTokenPickerApplicationClass(FakeApplicationV2, fakeMixin);
+  const app = new PickerApplication({});
+  const listeners = {};
+  const renders = [];
+  const root = {
+    dataset: {},
+    nodeType: 1,
+    addEventListener: (type, listener) => {
+      listeners[type] = listener;
+    },
+    querySelector: () => null,
+  };
+
+  app.selectedSourceIds = new Set();
+  app.sourceOptions = [{ id: 'bestiary' }, { id: 'draconic' }];
+  app.render = (options) => renders.push(options);
+
+  app._attachPartListeners('main', root);
+  app._attachPartListeners('main', root);
+
+  listeners.click({
+    target: {
+      dataset: { sourceAction: 'all' },
+      closest(selector) {
+        return selector === '[data-source-action]' ? this : null;
+      },
+    },
+    preventDefault() {},
+    stopPropagation() {},
+  });
+
+  assert.deepEqual([...app.selectedSourceIds], ['bestiary', 'draconic']);
+
+  listeners.click({
+    target: {
+      dataset: { sourceAction: 'clear' },
+      closest(selector) {
+        return selector === '[data-source-action]' ? this : null;
+      },
+    },
+    preventDefault() {},
+    stopPropagation() {},
+  });
+
+  assert.deepEqual([...app.selectedSourceIds], []);
+
+  listeners.click({
+    target: {
+      dataset: { sourceId: 'bestiary' },
+      closest(selector) {
+        return selector === '.pf2e-tokener-source-option[data-source-id]' ? this : null;
+      },
+    },
+    preventDefault() {},
+    stopPropagation() {},
+  });
+
+  assert.deepEqual([...app.selectedSourceIds], ['bestiary']);
+
+  listeners.click({
+    target: {
+      dataset: { sourceId: 'bestiary' },
+      closest(selector) {
+        return selector === '.pf2e-tokener-source-option[data-source-id]' ? this : null;
+      },
+    },
+    preventDefault() {},
+    stopPropagation() {},
+  });
+
+  assert.deepEqual([...app.selectedSourceIds], []);
+  assert.deepEqual(renders, [
+    { parts: ['main'] },
+    { parts: ['main'] },
+    { parts: ['main'] },
+    { parts: ['main'] },
+  ]);
+});
+
+test('Token HUD button stays hidden for players without token or actor ownership', () => {
+  const previousDocument = globalThis.document;
+  const previousGame = globalThis.game;
+  const { root, target } = createFakeHudRoot();
+
+  try {
+    globalThis.document = { createElement: createFakeElement };
+    globalThis.game = { user: { id: 'player1', isGM: false } };
+
+    renderTokenHud(
+      {
+        object: {
+          document: {
+            actor: {
+              testUserPermission: () => false,
+            },
+            canUserModify: () => false,
+          },
+        },
+      },
+      root,
+    );
+
+    assert.equal(
+      target.children.some((child) => child.className.includes('pf2e-tokener-button')),
+      false,
+    );
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.game = previousGame;
+  }
 });
 
 test('module manifest declares English localization file', () => {
@@ -587,9 +1369,14 @@ test('English localization file contains Token HUD strings', () => {
   assert.equal(translations['PF2ETokener.HUD.Tooltip'], 'PF2e Tokener');
   assert.equal(translations['PF2ETokener.HUD.SearchPlaceholder'], 'Search tokens');
   assert.equal(translations['PF2ETokener.HUD.AllSources'], 'All sources');
+  assert.equal(translations['PF2ETokener.HUD.NoSources'], 'No sources');
   assert.equal(translations['PF2ETokener.HUD.SourcesSelected'], '{count} sources');
   assert.equal(translations['PF2ETokener.HUD.SelectAllSources'], 'Select all');
-  assert.equal(translations['PF2ETokener.HUD.ClearSources'], 'Clear');
+  assert.equal(translations['PF2ETokener.HUD.ClearSources'], 'Clear all');
+  assert.equal(translations['PF2ETokener.HUD.SourceSearchPlaceholder'], 'Search sources');
+  assert.equal(translations['PF2ETokener.HUD.Tags'], 'Tags');
+  assert.equal(translations['PF2ETokener.HUD.TagSearchPlaceholder'], 'Search tags');
+  assert.equal(translations['PF2ETokener.HUD.ClearTags'], 'Clear tags');
   assert.equal(translations['PF2ETokener.HUD.BestMatches'], 'Best matches');
   assert.equal(translations['PF2ETokener.HUD.SearchResults'], 'Search results');
   assert.equal(translations['PF2ETokener.HUD.Current'], 'Current');
@@ -645,10 +1432,18 @@ test('token grid does not stretch sibling cards when one card opens actions', ()
   assert.match(gridRule, /align-items:\s*start;/);
 });
 
-test('truncated text helper sets Foundry and browser tooltip attributes', () => {
+test('truncated text helper sets Foundry tooltip attributes only', () => {
   const attributes = {};
+  let removedTitle = false;
   const element = {
     dataset: {},
+    title: 'stale native title',
+    removeAttribute: (key) => {
+      if (key === 'title') {
+        removedTitle = true;
+        delete element.title;
+      }
+    },
     setAttribute: (key, value) => {
       attributes[key] = value;
     },
@@ -656,7 +1451,8 @@ test('truncated text helper sets Foundry and browser tooltip attributes', () => 
 
   setTextTooltip(element, 'Pathfinder Tokens: Monster Core');
 
-  assert.equal(element.title, 'Pathfinder Tokens: Monster Core');
+  assert.equal(removedTitle, true);
+  assert.equal(element.title, undefined);
   assert.equal(element.dataset.tooltip, 'Pathfinder Tokens: Monster Core');
   assert.equal(element.dataset.tooltipDirection, 'UP');
   assert.equal(attributes['aria-label'], 'Pathfinder Tokens: Monster Core');
@@ -664,6 +1460,8 @@ test('truncated text helper sets Foundry and browser tooltip attributes', () => 
 
 test('token card typography fits compact thumbnail cells', () => {
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
   const labelRule = css.match(/#token-hud \.pf2e-tokener-label\s*\{[^}]+\}/)?.[0] ?? '';
   const sourceRule =
     [...css.matchAll(/#token-hud \.pf2e-tokener-source\s*\{[^}]+\}/g)].at(-1)?.[0] ?? '';
@@ -677,6 +1475,46 @@ test('token card typography fits compact thumbnail cells', () => {
   assert.match(labelRule, /white-space:\s*normal;/);
   assert.match(sourceRule, /font-size:\s*11px;/);
   assert.match(toolbarRule, /font-size:\s*15px;/);
+  assert.match(picker, /subtitle:\s*getDefaultSearchQuery\(app\.tokenDocument\)/);
+  assert.match(template, />{{subtitle}}<\/div>/);
+  assert.match(template, /data-tooltip='{{moduleTitle}}'/);
+  assert.doesNotMatch(template, /\btitle=/);
+  assert.doesNotMatch(template, />{{moduleTitle}}<\/div>/);
+});
+
+test('token cards hide missing preview images and empty action rows', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const unavailableRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-card\.is-unavailable\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(picker, /previewSrc:/);
+  assert.match(picker, /hasActions:/);
+  assert.match(picker, /getApplyActionsForCandidate\(candidate\)/);
+  assert.match(template, /{{#if previewSrc}}/);
+  assert.match(template, /src='{{previewSrc}}'/);
+  assert.match(template, /data-preview-src='{{previewSrc}}'/);
+  assert.doesNotMatch(template, /src='{{tokenSrc}}'/);
+  assert.match(template, /{{#if hasActions}}/);
+  assert.match(
+    picker,
+    /addEventListener\?\.\('error', \(event\) => handlePickerImageError\(app, event\), true\)/,
+  );
+  assert.match(picker, /getCandidatePreviewSources/);
+  assert.match(unavailableRule, /cursor:\s*default;/);
+});
+
+test('matched gallery tags render as compact token card chips', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const tagsRule = css.match(/#token-hud \.pf2e-tokener-tags\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagRule = css.match(/#token-hud \.pf2e-tokener-tag\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(tagsRule, /display:\s*flex;/);
+  assert.match(tagsRule, /flex-wrap:\s*wrap;/);
+  assert.match(tagsRule, /max-height:\s*28px;/);
+  assert.match(tagRule, /font-size:\s*9px;/);
+  assert.match(tagRule, /text-overflow:\s*ellipsis;/);
 });
 
 test('section headings are readable above result grids', () => {
@@ -689,43 +1527,82 @@ test('section headings are readable above result grids', () => {
 
 test('source filter CSS uses checkbox popover instead of native select', () => {
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
   const filterRule = css.match(/#token-hud \.pf2e-tokener-source-filter\s*\{[^}]+\}/)?.[0] ?? '';
   const menuRule = css.match(/#token-hud \.pf2e-tokener-source-menu\s*\{[^}]+\}/)?.[0] ?? '';
   const optionRule = css.match(/#token-hud \.pf2e-tokener-source-option\s*\{[^}]+\}/)?.[0] ?? '';
-  const checkboxRule =
-    css.match(
-      /#token-hud \.pf2e-tokener-source-option input\[type=['"]checkbox['"]\]\s*\{[^}]+\}/,
-    )?.[0] ?? '';
+  const checkRule = css.match(/#token-hud \.pf2e-tokener-source-check\s*\{[^}]+\}/)?.[0] ?? '';
   const checkedRule =
     css.match(
-      /#token-hud \.pf2e-tokener-source-option input\[type=['"]checkbox['"]\]:checked\s*\{[^}]+\}/,
+      /#token-hud \.pf2e-tokener-source-option\.is-selected \.pf2e-tokener-source-check\s*\{[^}]+\}/,
     )?.[0] ?? '';
   const checkmarkRule =
     css.match(
-      /#token-hud \.pf2e-tokener-source-option input\[type=['"]checkbox['"]\]:checked::after\s*\{[^}]+\}/,
+      /#token-hud \.pf2e-tokener-source-option\.is-selected \.pf2e-tokener-source-check::after\s*\{[^}]+\}/,
+    )?.[0] ?? '';
+  const appCheckedRule =
+    css.match(
+      /\.pf2e-tokener-app \.pf2e-tokener-source-option\.is-selected \.pf2e-tokener-source-check\s*\{[^}]+\}/,
     )?.[0] ?? '';
   const hoverRule =
-    css.match(/#token-hud \.pf2e-tokener-source-option:hover\s*\{[^}]+\}/)?.[0] ?? '';
+    css.match(
+      /#token-hud \.pf2e-tokener-source-option:hover,\s*#token-hud \.pf2e-tokener-source-option:focus-visible\s*\{[^}]+\}/,
+    )?.[0] ?? '';
   const countRule =
     css.match(/#token-hud \.pf2e-tokener-source-option-count\s*\{[^}]+\}/)?.[0] ?? '';
 
+  assert.match(template, /<button[\s\S]+class=['"]{{className}}['"]/);
+  assert.match(template, /data-source-id=['"]{{id}}['"]/);
+  assert.match(template, /aria-pressed=['"]{{ariaPressed}}['"]/);
+  assert.doesNotMatch(template, /type=['"]checkbox['"]/);
+  assert.match(
+    template,
+    /<span class=['"]pf2e-tokener-source-check['"] aria-hidden=['"]true['"]><\/span>/,
+  );
   assert.match(filterRule, /position:\s*relative;/);
   assert.match(menuRule, /position:\s*absolute;/);
-  assert.match(menuRule, /max-height:\s*220px;/);
-  assert.match(optionRule, /grid-template-columns:\s*auto minmax\(0, 1fr\)/);
+  assert.match(menuRule, /max-height:\s*min\(320px, calc\(100vh - 120px\)\);/);
+  assert.match(menuRule, /overflow-y:\s*auto;/);
+  assert.match(optionRule, /grid-template-columns:\s*16px minmax\(0, 1fr\) auto;/);
   assert.match(optionRule, /min-height:\s*28px;/);
   assert.match(optionRule, /padding:\s*2px 4px;/);
   assert.match(optionRule, /font-size:\s*11px;/);
-  assert.match(checkboxRule, /appearance:\s*none;/);
-  assert.match(checkboxRule, /width:\s*16px;/);
-  assert.match(checkboxRule, /height:\s*16px;/);
-  assert.doesNotMatch(checkboxRule, /accent-color:/);
+  assert.match(optionRule, /text-align:\s*left;/);
+  assert.match(checkRule, /width:\s*16px;/);
+  assert.match(checkRule, /height:\s*16px;/);
   assert.match(checkedRule, /background:\s*#8fb9d6;/);
+  assert.match(appCheckedRule, /background:\s*#8fb9d6;/);
   assert.match(checkmarkRule, /transform:\s*rotate\(45deg\);/);
   assert.match(hoverRule, /background:\s*rgba\(143, 185, 214, 0\.08\);/);
   assert.match(countRule, /justify-self:\s*end;/);
   assert.match(countRule, /border-radius:\s*999px;/);
   assert.match(countRule, /background:\s*rgba\(255, 255, 255, 0\.06\);/);
+});
+
+test('source drawer includes search input above source controls', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const sourceSearchRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-source-search\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(template, /class=['"]pf2e-tokener-source-search['"]/);
+  assert.match(template, /value=['"]{{source\.filterQuery}}['"]/);
+  assert.match(template, /placeholder=['"]{{source\.searchPlaceholder}}['"]/);
+  assert.match(picker, /sourceFilterQuery/);
+  assert.match(picker, /filterSourceOptionsByQuery\(options, app\.sourceFilterQuery\)/);
+  assert.match(picker, /\.pf2e-tokener-source-search/);
+  assert.match(sourceSearchRule, /height:\s*28px;/);
+  assert.match(sourceSearchRule, /width:\s*100%;/);
+});
+
+test('source popover is not clipped by the token picker panel', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const panelRule = css.match(/#token-hud \.pf2e-tokener-panel\s*\{[^}]+\}/)?.[0] ?? '';
+  const contentRule = css.match(/#token-hud \.pf2e-tokener-content\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(panelRule, /overflow:\s*visible;/);
+  assert.match(contentRule, /overflow:\s*auto;/);
 });
 
 test('canvas zoom helper reads stage scale and clamps panel inverse scale', () => {
@@ -750,6 +1627,70 @@ test('token picker panel CSS uses canvas zoom variables', () => {
   assert.match(panelRule, /left:\s*calc\(64px \* var\(--pf2e-tokener-inverse-zoom, 1\)\);/);
   assert.match(panelRule, /transform:\s*scale\(var\(--pf2e-tokener-inverse-zoom, 1\)\);/);
   assert.match(panelRule, /transform-origin:\s*top left;/);
+});
+
+test('ApplicationV2 token picker CSS is scoped outside the Token HUD', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const appPanelRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-panel\s*\{[^}]+\}/)?.[0] ?? '';
+  const appContentRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-content\s*\{[^}]+\}/)?.[0] ?? '';
+  const sourceMenuRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-source-menu\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(appPanelRule, /position:\s*relative;/);
+  assert.match(appPanelRule, /transform:\s*none;/);
+  assert.match(appContentRule, /overflow:\s*auto;/);
+  assert.match(template, /class=['"]{{source\.menuClassName}}['"]/);
+  assert.match(sourceMenuRule, /position:\s*static;/);
+  assert.match(sourceMenuRule, /width:\s*100%;/);
+  assert.doesNotMatch(picker, /positionFloatingSourceMenu/);
+  assert.doesNotMatch(picker, /getFloatingMenuPlacement/);
+});
+
+test('searchable tag drawer UI is rendered in the ApplicationV2 picker', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const tagBarRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-filter\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagDrawerRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-drawer\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagSearchRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-search\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagGroupsRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-groups\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagListRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-list\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagOptionRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-option\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(picker, /prepareTagFilterView/);
+  assert.match(template, /pf2e-tokener-tag-filter/);
+  assert.match(template, /pf2e-tokener-tag-search/);
+  assert.match(template, /pf2e-tokener-tag-list-header/);
+  assert.match(template, /data-tag-group=['"]{{id}}['"]/);
+  assert.match(template, /data-tag-action=['"]clear['"]/);
+  assert.match(template, /data-tag-id=['"]{{id}}['"]/);
+  assert.match(template, /{{displayCount}}/);
+  assert.match(picker, /selectedTagIds/);
+  assert.match(picker, /getTagGroupSearchState\(group, tagFilter\)/);
+  assert.doesNotMatch(picker, /app\.searchQuery = toggleTagFilterTerm/);
+  assert.match(tagBarRule, /display:\s*grid;/);
+  assert.match(
+    tagDrawerRule,
+    /grid-template-columns:\s*minmax\(118px, 0\.36fr\) minmax\(0, 1fr\);/,
+  );
+  assert.match(tagDrawerRule, /grid-template-rows:\s*auto minmax\(0, 1fr\);/);
+  assert.match(tagSearchRule, /grid-column:\s*1 \/ -1;/);
+  assert.match(tagGroupsRule, /grid-column:\s*1 \/ 2;/);
+  assert.match(tagGroupsRule, /grid-row:\s*2 \/ 3;/);
+  assert.match(tagListRule, /grid-column:\s*2 \/ 3;/);
+  assert.match(tagListRule, /grid-template-rows:\s*auto minmax\(0, 1fr\);/);
+  assert.match(tagOptionRule, /grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
+  assert.match(css, /\.pf2e-tokener-app \.pf2e-tokener-tag-group-button\.is-match\s*\{/);
+  assert.match(css, /\.pf2e-tokener-app \.pf2e-tokener-tag-group-button\.is-filtered-out\s*\{/);
 });
 
 test('image preview helper returns actor and token panes side by side', () => {
