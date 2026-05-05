@@ -42,5 +42,8 @@
     ]
   },
   "action": "manageModule",
-  "description": "Adds a searchable Token HUD picker for quickly switching PF2e token art from installed token modules."
+  "description": "Adds a searchable Token HUD picker for quickly switching PF2e token art from installed token modules.",
+  "url": "#{URL}#",
+  "manifest": "#{MANIFEST}#",
+  "download": "#{DOWNLOAD}#"
 }
