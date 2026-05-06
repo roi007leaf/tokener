@@ -21,15 +21,23 @@ test('English localization file contains HUD/action/notification strings', () =>
   );
 
   expect(translations['PF2ETokener.HUD.Tooltip']).toBe('PF2e Tokener');
+  expect(translations['PF2ETokener.HUD.RevertButtonTooltip']).toBe(
+    'PF2e Tokener - right-click to revert last change.',
+  );
   expect(translations['PF2ETokener.HUD.SearchPlaceholder']).toBe('Search tokens');
   expect(translations['PF2ETokener.HUD.AllSources']).toBe('All sources');
   expect(translations['PF2ETokener.HUD.NoSources']).toBe('No sources');
   expect(translations['PF2ETokener.HUD.SourcesSelected']).toBe('{count} sources');
   expect(translations['PF2ETokener.HUD.SelectAllSources']).toBe('Select all');
   expect(translations['PF2ETokener.HUD.ClearSources']).toBe('Clear all');
+  expect(translations['PF2ETokener.HUD.Filters']).toBe('Filters');
   expect(translations['PF2ETokener.HUD.Tags']).toBe('Tags');
   expect(translations['PF2ETokener.HUD.TagSearchPlaceholder']).toBe('Search tags');
   expect(translations['PF2ETokener.HUD.ClearTags']).toBe('Clear tags');
+  expect(translations['PF2ETokener.HUD.ResetTags']).toBeUndefined();
+  expect(translations['PF2ETokener.HUD.IncludeTag']).toBe('Include tag');
+  expect(translations['PF2ETokener.HUD.ExcludeTag']).toBe('Exclude tag');
+  expect(translations['PF2ETokener.HUD.ShowMore']).toBe('Show more');
   expect(translations['PF2ETokener.Actions.Token']).toBe('Token');
   expect(translations['PF2ETokener.Actions.Actor']).toBe('Actor');
   expect(translations['PF2ETokener.Actions.Portrait']).toBe('Portrait');

@@ -1,4 +1,7 @@
-import { localize } from './utils.js';
+import { TAG_GROUP_ORDER } from './tags.js';
+import { localize, normalizeLabel, normalizeSearchText } from './utils.js';
+
+const PREVIEW_TAG_GROUP_ORDER = ['category', ...TAG_GROUP_ORDER.filter((group) => group !== 'category')];
 
 export function getImagePreviewItems(candidate) {
   return [
@@ -15,6 +18,31 @@ export function getImagePreviewItems(candidate) {
       available: Boolean(candidate?.tokenSrc),
     },
   ].filter((item) => item.available);
+}
+
+export function getCandidatePreviewTagGroups(candidate) {
+  const tags = candidate?.tags;
+  if (!tags || typeof tags !== 'object') return [];
+
+  return Object.entries(tags)
+    .map(([group, values]) => {
+      const normalizedGroup = normalizeSearchText(group);
+      const normalizedValues = (Array.isArray(values) ? values : [values])
+        .map((value) => normalizeSearchText(value))
+        .filter(Boolean);
+      return {
+        group: normalizedGroup,
+        label: normalizeLabel(normalizedGroup),
+        values: [...new Set(normalizedValues)].map((value) => value.toUpperCase()),
+      };
+    })
+    .filter((group) => group.group && group.values.length)
+    .sort(
+      (a, b) =>
+        previewTagGroupRank(a.group) - previewTagGroupRank(b.group) ||
+        a.label.localeCompare(b.label),
+    )
+    .map(({ label, values }) => ({ label, values }));
 }
 
 export function openImagePreview(candidate) {
@@ -59,6 +87,7 @@ export function openImagePreview(candidate) {
   for (const item of items) {
     panes.append(createPreviewPane(item));
   }
+  const tags = createPreviewTags(candidate);
 
   const closePreview = () => {
     globalThis.window?.removeEventListener?.('keydown', onKeyDown);
@@ -76,9 +105,47 @@ export function openImagePreview(candidate) {
 
   header.append(titleBlock, close);
   dialog.append(header, panes);
+  if (tags) dialog.append(tags);
   overlay.append(dialog);
   doc.body.append(overlay);
   close.focus?.();
+}
+
+function createPreviewTags(candidate) {
+  const groups = getCandidatePreviewTagGroups(candidate);
+  if (!groups.length) return null;
+
+  const doc = globalThis.document;
+  const container = doc.createElement('div');
+  container.className = 'pf2e-tokener-preview-tags';
+
+  for (const group of groups) {
+    const row = doc.createElement('div');
+    row.className = 'pf2e-tokener-preview-tag-row';
+
+    const label = doc.createElement('div');
+    label.className = 'pf2e-tokener-preview-tag-label';
+    label.textContent = group.label;
+
+    const values = doc.createElement('div');
+    values.className = 'pf2e-tokener-preview-tag-values';
+    for (const value of group.values) {
+      const chip = doc.createElement('span');
+      chip.className = 'pf2e-tokener-preview-tag-chip';
+      chip.textContent = value;
+      values.append(chip);
+    }
+
+    row.append(label, values);
+    container.append(row);
+  }
+
+  return container;
+}
+
+function previewTagGroupRank(group) {
+  const index = PREVIEW_TAG_GROUP_ORDER.indexOf(group);
+  return index >= 0 ? index : PREVIEW_TAG_GROUP_ORDER.length;
 }
 
 function createPreviewPane(item) {

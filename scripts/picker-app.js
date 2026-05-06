@@ -1,13 +1,24 @@
-import { MODULE_ID } from './constants.js';
+import { DEFAULT_LIMIT, MODULE_ID } from './constants.js';
 import {
   buildActorUpdate,
+  buildRevertSnapshot,
   buildTokenUpdate,
   getApplyActionsForCandidate,
   getApplyTargets,
   getCandidatePreviewSrc,
   getCandidatePreviewSources,
+  getLastRevertData,
+  hasRevertTargets,
+  REVERT_FLAG_PATH,
+  revertLastTokenerChange,
 } from './actions.js';
-import { getCandidatesForTokenDocument } from './candidates.js';
+import { getCandidatesForTokenDocument, searchCandidates } from './candidates.js';
+import {
+  filterFavoriteCandidates,
+  getFavoriteIds,
+  isFavoriteCandidate,
+  toggleFavoriteCandidate,
+} from './favorites.js';
 import { ensureIndex } from './foundry-index.js';
 import { openImagePreview } from './preview.js';
 import {
@@ -19,7 +30,6 @@ import {
 import {
   getTagFilterOptions,
   getTagGroupSearchState,
-  getTagListCountLabel,
   isTagOptionSearchMatch,
 } from './tags.js';
 import {
@@ -101,7 +111,7 @@ export function getTokenPickerApplicationClass(
         title: 'PF2e Tokener',
       },
       position: {
-        width: 420,
+        width: 720,
       },
     };
 
@@ -122,6 +132,9 @@ export function getTokenPickerApplicationClass(
       this.activeTagGroup = null;
       this.tagFilterQuery = '';
       this.selectedTagIds = new Set();
+      this.selectedExcludedTagIds = new Set();
+      this.favoritesOnly = false;
+      this.resultLimit = DEFAULT_LIMIT;
       this._candidateMap = new Map();
       this._tagMap = new Map();
     }
@@ -169,26 +182,85 @@ async function preparePickerContext(app) {
   });
   const tagOptions = getTagFilterOptions(sourceScopedCandidates);
   syncSelectedTags(app, tagOptions);
-  const allCandidates = getCandidatesForTokenDocument(
-    index,
-    app.tokenDocument,
-    buildCandidateSearchQuery(app.searchQuery, app.selectedTagIds),
-  );
-  const candidates = filterCandidatesBySources(allCandidates, app.selectedSourceIds, {
-    emptyMeansAll: false,
-  });
-  const sections = prepareCandidateSections(candidates, app);
+  const favoriteIds = getFavoriteIds();
+  const candidatePool = getPickerCandidatePool(index, app, { favoriteIds, sourceOptions });
+  const sections = prepareCandidateSections(candidatePool.candidates, app, favoriteIds);
 
   return {
-    count: candidates.length,
+    count: candidatePool.countLabel,
     emptyMessage: localize('HUD.NoTokenArt', 'No token art found.'),
-    hasResults: candidates.length > 0,
+    hasResults: candidatePool.candidates.length > 0,
+    paging: preparePagingView(candidatePool),
     searchPlaceholder: localize('HUD.SearchPlaceholder', 'Search tokens'),
     searchQuery: app.searchQuery,
     sections,
+    favorites: prepareFavoritesView(favoriteIds, app),
+    revert: prepareRevertView(app.tokenDocument),
     source: prepareSourceFilterView(sourceOptions, app),
     tags: prepareTagFilterView(tagOptions, app),
   };
+}
+
+export function getPickerCandidatePool(
+  index,
+  app,
+  { favoriteIds = new Set(), sourceOptions = getPanelSourceFilterOptions(index) } = {},
+) {
+  const resultLimit = Math.max(DEFAULT_LIMIT, Number(app?.resultLimit) || DEFAULT_LIMIT);
+  const selectedSourceIds = app?.selectedSourceIds ?? new Set(sourceOptions.map((option) => option.id));
+  const selectedTagIds = app?.selectedTagIds ?? new Set();
+  const excludedTagIds = app?.selectedExcludedTagIds ?? app?.excludedTagIds ?? new Set();
+  const query = buildCandidateSearchQuery(app?.searchQuery, selectedTagIds, excludedTagIds);
+  const browseMode = shouldBrowseAllResults(app, sourceOptions);
+  const allCandidates = browseMode
+    ? searchCandidates(index, query, { limit: Number.POSITIVE_INFINITY })
+    : getCandidatesForTokenDocument(index, app?.tokenDocument, query, {
+        limit: Number.POSITIVE_INFINITY,
+      });
+  const sourceFilteredCandidates = filterCandidatesBySources(allCandidates, selectedSourceIds, {
+    emptyMeansAll: false,
+  });
+  const filteredCandidates = filterFavoriteCandidates(
+    sourceFilteredCandidates,
+    favoriteIds,
+    Boolean(app?.favoritesOnly),
+  );
+  const candidates = filteredCandidates.slice(0, resultLimit);
+
+  return {
+    browseMode,
+    candidates,
+    countLabel:
+      candidates.length < filteredCandidates.length
+        ? `${candidates.length} / ${filteredCandidates.length}`
+        : String(filteredCandidates.length),
+    hasMore: candidates.length < filteredCandidates.length,
+    limit: resultLimit,
+    shown: candidates.length,
+    total: filteredCandidates.length,
+  };
+}
+
+function shouldBrowseAllResults(app, sourceOptions) {
+  const hasSearch = Boolean(String(app?.searchQuery ?? '').trim());
+  if (hasSearch) return false;
+  return (
+    isSourceFilterChanged(app?.selectedSourceIds, sourceOptions) ||
+    collectionSize(app?.selectedTagIds) > 0 ||
+    collectionSize(app?.selectedExcludedTagIds ?? app?.excludedTagIds) > 0 ||
+    Boolean(app?.favoritesOnly)
+  );
+}
+
+function isSourceFilterChanged(selectedSourceIds, sourceOptions) {
+  if (!selectedSourceIds) return false;
+  const selected = new Set(selectedSourceIds);
+  if (selected.size !== sourceOptions.length) return true;
+  return sourceOptions.some((option) => !selected.has(option.id));
+}
+
+function collectionSize(collection) {
+  return collection?.size ?? collection?.length ?? 0;
 }
 
 function activatePickerListeners(app, html) {
@@ -222,6 +294,7 @@ function handlePickerInput(app, event) {
   const target = event.target;
   if (matchesTarget(target, '.pf2e-tokener-search')) {
     app.searchQuery = target.value;
+    resetResultLimit(app);
     app._focusSearch = true;
     renderMainPart(app);
     return;
@@ -243,6 +316,31 @@ function handlePickerInput(app, event) {
 
 async function handlePickerClick(app, event) {
   const target = event.target;
+  if (closestTarget(target, '[data-revert-action="last"]')) {
+    event.preventDefault?.();
+    await revertLastChange(app);
+    return;
+  }
+
+  if (closestTarget(target, '[data-favorites-filter="toggle"]')) {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    app.favoritesOnly = !app.favoritesOnly;
+    resetResultLimit(app);
+    renderMainPart(app);
+    return;
+  }
+
+  const favoriteButton = closestTarget(target, '[data-favorite-candidate-id]');
+  if (favoriteButton) {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const candidate = app._candidateMap.get(favoriteButton.dataset.favoriteCandidateId);
+    if (candidate) await toggleFavoriteCandidate(candidate);
+    renderMainPart(app);
+    return;
+  }
+
   const applyButton = closestTarget(target, '[data-apply-action]');
   if (applyButton) {
     event.preventDefault?.();
@@ -256,6 +354,13 @@ async function handlePickerClick(app, event) {
         app.tokenDocument,
         card,
       );
+    return;
+  }
+
+  if (closestTarget(target, '[data-results-action="more"]')) {
+    event.preventDefault?.();
+    app.resultLimit = (Number(app.resultLimit) || DEFAULT_LIMIT) + DEFAULT_LIMIT;
+    renderMainPart(app);
     return;
   }
 
@@ -277,6 +382,7 @@ async function handlePickerClick(app, event) {
     } else if (sourceAction.dataset.sourceAction === 'clear') {
       app.selectedSourceIds.clear();
     }
+    resetResultLimit(app);
     renderMainPart(app);
     return;
   }
@@ -287,6 +393,7 @@ async function handlePickerClick(app, event) {
     const sourceId = sourceOption.dataset.sourceId;
     if (app.selectedSourceIds.has(sourceId)) app.selectedSourceIds.delete(sourceId);
     else app.selectedSourceIds.add(sourceId);
+    resetResultLimit(app);
     renderMainPart(app);
     return;
   }
@@ -303,15 +410,20 @@ async function handlePickerClick(app, event) {
   if (closestTarget(target, '[data-tag-action="clear"]')) {
     event.preventDefault?.();
     app.selectedTagIds.clear();
+    app.selectedExcludedTagIds.clear();
     app.tagFilterQuery = '';
+    resetResultLimit(app);
     renderMainPart(app);
     return;
   }
 
-  const tagGroup = closestTarget(target, '[data-tag-group]');
-  if (tagGroup) {
+  const tagExcludeButton = closestTarget(target, '[data-tag-exclude-id]');
+  if (tagExcludeButton) {
     event.preventDefault?.();
-    app.activeTagGroup = tagGroup.dataset.tagGroup;
+    const tag = app._tagMap.get(tagExcludeButton.dataset.tagExcludeId);
+    if (!tag) return;
+    toggleExcludedTag(app, tag.id);
+    resetResultLimit(app);
     renderMainPart(app);
     return;
   }
@@ -321,8 +433,8 @@ async function handlePickerClick(app, event) {
     event.preventDefault?.();
     const tag = app._tagMap.get(tagButton.dataset.tagId);
     if (!tag) return;
-    if (app.selectedTagIds.has(tag.id)) app.selectedTagIds.delete(tag.id);
-    else app.selectedTagIds.add(tag.id);
+    toggleIncludedTag(app, tag.id);
+    resetResultLimit(app);
     renderMainPart(app);
     return;
   }
@@ -444,11 +556,39 @@ function closestTarget(target, selector) {
 }
 
 function renderMainPart(app) {
-  app.render?.({ parts: ['main'] });
+  app?.render?.({ parts: ['main'] });
 }
 
-export function buildCandidateSearchQuery(searchQuery, selectedTagIds = []) {
-  return [String(searchQuery ?? '').trim(), ...selectedTagIds].filter(Boolean).join(' ');
+function resetResultLimit(app) {
+  app.resultLimit = DEFAULT_LIMIT;
+}
+
+function toggleIncludedTag(app, tagId) {
+  if (app.selectedTagIds.has(tagId)) {
+    app.selectedTagIds.delete(tagId);
+    return;
+  }
+  app.selectedExcludedTagIds.delete(tagId);
+  app.selectedTagIds.add(tagId);
+}
+
+function toggleExcludedTag(app, tagId) {
+  if (app.selectedExcludedTagIds.has(tagId)) {
+    app.selectedExcludedTagIds.delete(tagId);
+    return;
+  }
+  app.selectedTagIds.delete(tagId);
+  app.selectedExcludedTagIds.add(tagId);
+}
+
+export function buildCandidateSearchQuery(searchQuery, selectedTagIds = [], excludedTagIds = []) {
+  return [
+    String(searchQuery ?? '').trim(),
+    ...selectedTagIds,
+    ...[...excludedTagIds].map((tagId) => `!${tagId}`),
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 function syncSelectedSources(app, sourceOptions) {
@@ -467,10 +607,13 @@ function syncSelectedTags(app, tagOptions) {
   const validIds = new Set(tagOptions.map((option) => option.id));
   if (!app.selectedTagIds) {
     app.selectedTagIds = new Set();
-    return;
   }
+  if (!app.selectedExcludedTagIds) app.selectedExcludedTagIds = new Set();
   for (const id of [...app.selectedTagIds]) {
     if (!validIds.has(id)) app.selectedTagIds.delete(id);
+  }
+  for (const id of [...app.selectedExcludedTagIds]) {
+    if (!validIds.has(id)) app.selectedExcludedTagIds.delete(id);
   }
 }
 
@@ -506,71 +649,116 @@ function prepareTagFilterView(options, app) {
   app._tagOptions = options;
   const preparedOptions = options.map((option) => ({
     ...option,
-    active: app.selectedTagIds.has(option.id),
+    excluded: app.selectedExcludedTagIds.has(option.id),
+    included: app.selectedTagIds.has(option.id),
     groupLabel: normalizeLabel(option.group),
   }));
-  const activeTags = preparedOptions.filter((option) => option.active);
+  const activeIncluded = preparedOptions.filter((option) => option.included);
+  const activeExcluded = preparedOptions.filter((option) => option.excluded);
   const groups = groupTagOptions(preparedOptions);
-  const validGroupIds = new Set(groups.map((group) => group.id));
-  if (!app.activeTagGroup || !validGroupIds.has(app.activeTagGroup)) {
-    app.activeTagGroup = activeTags[0]?.group ?? groups[0]?.id ?? null;
-  }
-  const activeGroup = groups.find((group) => group.id === app.activeTagGroup) ?? groups[0] ?? null;
   const tagFilter = normalizeSearchText(app.tagFilterQuery);
-  const visibleOptions = (activeGroup?.options ?? []).filter((option) =>
-    isTagOptionSearchMatch(option, tagFilter),
-  );
-  const activeGroupTotal = activeGroup?.options.length ?? 0;
+  const activeCount = activeIncluded.length + activeExcluded.length;
 
   return {
-    active: activeTags,
-    buttonLabel: activeTags.length
-      ? `${localize('HUD.Tags', 'Tags')} (${activeTags.length})`
+    activeExcluded: activeExcluded.map((option) => prepareActiveTagView(option, 'excluded')),
+    activeIncluded: activeIncluded.map((option) => prepareActiveTagView(option, 'included')),
+    buttonLabel: activeCount
+      ? `${localize('HUD.Tags', 'Tags')} (${activeCount})`
       : localize('HUD.Tags', 'Tags'),
     className: [
-      'pf2e-tokener-tag-filter',
-      app.tagMenuOpen ? 'is-open' : '',
       options.length ? '' : 'is-empty',
     ]
       .filter(Boolean)
       .join(' '),
-    activeGroupLabel: activeGroup?.label ?? '',
     clearLabel: localize('HUD.ClearTags', 'Clear tags'),
-    countLabel: getTagListCountLabel(visibleOptions.length, activeGroupTotal, Boolean(tagFilter)),
-    expanded: app.tagMenuOpen ? 'true' : 'false',
     filterQuery: app.tagFilterQuery,
     groups: groups.map((group) => {
       const searchState = getTagGroupSearchState(group, tagFilter);
+      const visibleOptions = group.options.filter((option) => isTagOptionSearchMatch(option, tagFilter));
       return {
         ...group,
         ...searchState,
-        ariaPressed: group.id === activeGroup?.id ? 'true' : 'false',
         className: [
-          'pf2e-tokener-tag-group-button',
-          group.id === activeGroup?.id ? 'is-active' : '',
           searchState.isFiltering && searchState.hasMatches ? 'is-match' : '',
           searchState.isFiltering && !searchState.hasMatches ? 'is-filtered-out' : '',
         ]
           .filter(Boolean)
           .join(' '),
         displayCount: searchState.isFiltering ? searchState.matchedOptionCount : group.count,
+        open: !searchState.isFiltering || searchState.hasMatches,
+        visibleOptions: visibleOptions.map(prepareTagOptionView),
       };
     }),
-    hasActive: activeTags.length > 0,
+    hasActive: activeCount > 0,
     hasOptions: options.length > 0,
-    isOpen: app.tagMenuOpen,
     searchPlaceholder: localize('HUD.TagSearchPlaceholder', 'Search tags'),
-    totalCount: activeGroupTotal,
-    visibleCount: visibleOptions.length,
-    visibleOptions: visibleOptions.map((option) => ({
-      ...option,
-      ariaPressed: option.active ? 'true' : 'false',
-      className: `pf2e-tokener-tag-option${option.active ? ' is-active' : ''}`,
-    })),
+    title: localize('HUD.Filters', 'Filters'),
   };
 }
 
-function prepareCandidateSections(candidates, app) {
+function prepareActiveTagView(option, mode) {
+  return {
+    ...option,
+    className: `pf2e-tokener-active-tag is-${mode}`,
+    prefix: mode === 'excluded' ? '-' : '+',
+  };
+}
+
+function prepareTagOptionView(option) {
+  return {
+    ...option,
+    excludeAriaPressed: option.excluded ? 'true' : 'false',
+    excludeClassName: `pf2e-tokener-tag-exclude${option.excluded ? ' is-excluded' : ''}`,
+    excludeTooltip: localize('HUD.ExcludeTag', 'Exclude tag'),
+    includeAriaPressed: option.included ? 'true' : 'false',
+    includeClassName: [
+      option.included ? 'is-included' : '',
+      option.excluded ? 'is-excluded is-muted' : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    includeTooltip: localize('HUD.IncludeTag', 'Include tag'),
+  };
+}
+
+function prepareRevertView(tokenDocument) {
+  const snapshot = getLastRevertData(tokenDocument);
+  const available = hasRevertTargets(snapshot);
+  return {
+    available,
+    buttonLabel: localize('HUD.RevertLast', 'Revert last'),
+    detail: available ? getRevertDetail(snapshot) : '',
+    tooltip: localize('HUD.RevertTooltip', 'Restore the art from before the last Tokener change.'),
+  };
+}
+
+function prepareFavoritesView(favoriteIds, app) {
+  const count = favoriteIds.size;
+  return {
+    active: Boolean(app.favoritesOnly),
+    ariaPressed: app.favoritesOnly ? 'true' : 'false',
+    buttonLabel: count
+      ? `${localize('HUD.Favorites', 'Favorites')} (${count})`
+      : localize('HUD.Favorites', 'Favorites'),
+    className: [
+      'pf2e-tokener-favorites-filter-button',
+      app.favoritesOnly ? 'is-active' : '',
+      count ? '' : 'is-empty',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    tooltip: localize('HUD.FavoritesTooltip', 'Show only favorite token art.'),
+  };
+}
+
+function preparePagingView(candidatePool) {
+  return {
+    hasMore: candidatePool.hasMore,
+    showMoreLabel: localize('HUD.ShowMore', 'Show more'),
+  };
+}
+
+function prepareCandidateSections(candidates, app, favoriteIds = new Set()) {
   app._candidateMap = new Map();
   const pinned = candidates.filter(
     (candidate) => candidate.matchType === 'exact' || candidate.matchType === 'name',
@@ -581,25 +769,26 @@ function prepareCandidateSections(candidates, app) {
   return [
     {
       candidates: pinned.map((candidate, index) =>
-        prepareCandidateView(candidate, app, `pinned-${index}`),
+        prepareCandidateView(candidate, app, `pinned-${index}`, favoriteIds),
       ),
       title: localize('HUD.BestMatches', 'Best matches'),
     },
     {
       candidates: broad.map((candidate, index) =>
-        prepareCandidateView(candidate, app, `broad-${index}`),
+        prepareCandidateView(candidate, app, `broad-${index}`, favoriteIds),
       ),
       title: localize('HUD.SearchResults', 'Search results'),
     },
   ].filter((section) => section.candidates.length);
 }
 
-function prepareCandidateView(candidate, app, viewId) {
+function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
   app._candidateMap.set(viewId, candidate);
   const actions = getApplyActionsForCandidate(candidate);
   const previewSrc = getCandidatePreviewSrc(candidate);
   const hasPreview = Boolean(previewSrc);
   const isUnavailable = actions.length === 0;
+  const favorite = isFavoriteCandidate(candidate, favoriteIds);
   return {
     ...candidate,
     actions,
@@ -614,6 +803,12 @@ function prepareCandidateView(candidate, app, viewId) {
     current: isCurrentTokenArt(candidate, app.tokenDocument),
     currentLabel: localize('HUD.Current', 'Current'),
     hasActions: actions.length > 0,
+    favoriteAriaPressed: favorite ? 'true' : 'false',
+    favoriteClassName: `pf2e-tokener-favorite-toggle${favorite ? ' is-active' : ''}`,
+    favoriteIconClass: favorite ? 'fas fa-star' : 'far fa-star',
+    favoriteTooltip: favorite
+      ? localize('HUD.RemoveFavorite', 'Remove favorite')
+      : localize('HUD.AddFavorite', 'Add favorite'),
     hasMatchedTags: Array.isArray(candidate.matchedTags) && candidate.matchedTags.length > 0,
     hasPreview: hasPreview,
     previewSrc: previewSrc,
@@ -679,19 +874,29 @@ async function applyCandidateAction(action, candidate, tokenDocument, card) {
   if (!availableAction) return;
 
   const targets = getApplyTargets(action);
+  const revertSnapshot = buildRevertSnapshot({ action, candidate, tokenDocument });
   card?.classList.add('is-applying');
 
   try {
     if (targets.token) {
-      await tokenDocument.update(buildTokenUpdate(candidate));
+      await tokenDocument.update({
+        ...buildTokenUpdate(candidate),
+        [REVERT_FLAG_PATH]: revertSnapshot,
+      });
     }
 
     if (targets.actor && actor) {
-      await actor.update(buildActorUpdate(candidate));
+      await actor.update({
+        ...buildActorUpdate(candidate),
+        [REVERT_FLAG_PATH]: revertSnapshot,
+      });
     }
 
     if (targets.portrait && actor) {
-      await actor.update({ img: candidate.portraitSrc || candidate.tokenSrc });
+      await actor.update({
+        img: candidate.portraitSrc || candidate.tokenSrc,
+        [REVERT_FLAG_PATH]: revertSnapshot,
+      });
     }
 
     globalThis.ui?.notifications?.info?.(
@@ -704,5 +909,30 @@ async function applyCandidateAction(action, candidate, tokenDocument, card) {
     );
   } finally {
     card?.classList.remove('is-applying');
+    renderMainPart(activePicker);
   }
+}
+
+async function revertLastChange(app) {
+  const tokenDocument = app.tokenDocument;
+
+  try {
+    const reverted = await revertLastTokenerChange(tokenDocument);
+    if (!reverted) return;
+
+    globalThis.ui?.notifications?.info?.(
+      localize('Notifications.Reverted', 'PF2e Tokener: previous art restored.'),
+    );
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to revert token art`, error);
+    globalThis.ui?.notifications?.error?.(
+      localize('Notifications.RevertFailed', 'PF2e Tokener: failed to restore previous art.'),
+    );
+  } finally {
+    renderMainPart(app);
+  }
+}
+
+function getRevertDetail(snapshot) {
+  return [normalizeLabel(snapshot?.action), snapshot?.label].filter(Boolean).join(': ');
 }

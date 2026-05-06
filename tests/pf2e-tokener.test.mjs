@@ -4,12 +4,18 @@ import fs from 'node:fs';
 
 import {
   buildActorUpdate,
+  buildActorRevertUpdate,
+  buildRevertSnapshot,
   buildTokenUpdate,
+  buildTokenRevertUpdate,
+  REVERT_FLAG_PATH,
   getCanvasZoom,
   getApplyActions,
   getApplyActionsForCandidate,
   getApplyTargets,
+  getCandidatePreviewTagGroups,
   getCandidatePreviewSources,
+  getLastRevertData,
   getImagePreviewItems,
   getPanelZoomData,
   getPanelSourceFilterOptions,
@@ -27,13 +33,18 @@ import {
   createMappedCandidates,
   dedupeCandidates,
   filterCandidatesBySources,
+  filterFavoriteCandidates,
+  getFavoriteIds,
   getCandidatesForTokenDocument,
+  getPickerCandidatePool,
   localize,
   normalizeHudElement,
+  registerFavoriteSettings,
   renderTokenHud,
   setTextTooltip,
   searchCandidates,
   state,
+  toggleFavoriteCandidate,
   toggleTagFilterTerm,
 } from '../scripts/pf2e-tokener.js';
 
@@ -352,6 +363,47 @@ test('search matches gallery tags and returns matched tag chips', () => {
   assert.deepEqual(searchCandidates(candidates, 'equipment:shield'), []);
 });
 
+test('search can exclude exact gallery tags', () => {
+  const candidates = createDatasheetCandidates({
+    module: MODULE,
+    datasheet: [
+      {
+        label: 'Human Duelist',
+        tags: {
+          ancestry: ['human'],
+          equipment: ['sword'],
+        },
+        art: {
+          token: 'modules/pf2e-tokens-test/assets/tokens/human-duelist.webp',
+        },
+      },
+      {
+        label: 'Human Gunslinger',
+        tags: {
+          ancestry: ['human'],
+          equipment: ['firearm'],
+        },
+        art: {
+          token: 'modules/pf2e-tokens-test/assets/tokens/human-gunslinger.webp',
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    searchCandidates(candidates, 'ancestry:human !equipment:firearm').map(
+      (candidate) => candidate.label,
+    ),
+    ['Human Duelist'],
+  );
+  assert.deepEqual(
+    searchCandidates(candidates, 'ancestry:human -equipment:sword').map(
+      (candidate) => candidate.label,
+    ),
+    ['Human Gunslinger'],
+  );
+});
+
 test('tag filter options summarize visible gallery tags by group and count', () => {
   const options = getTagFilterOptions([
     {
@@ -470,6 +522,12 @@ test('selected tag chips compose hidden candidate query without changing visible
   const query = buildCandidateSearchQuery('Blue Dragon', ['ancestry:human', 'category:humanoid']);
 
   assert.equal(query, 'Blue Dragon ancestry:human category:humanoid');
+});
+
+test('selected excluded tag chips compose hidden candidate query without changing visible search text', () => {
+  const query = buildCandidateSearchQuery('Blue Dragon', ['ancestry:human'], ['equipment:firearm']);
+
+  assert.equal(query, 'Blue Dragon ancestry:human !equipment:firearm');
 });
 
 test('tag clear helper removes all known exact tag terms from search query', async () => {
@@ -1034,6 +1092,50 @@ test('HUD source menu is built from full index', () => {
   );
 });
 
+test('source-only picker filtering browses all matching art with a render cap', () => {
+  const index = [
+    ...Array.from({ length: 130 }, (_, index) => ({
+      id: `a-${index}`,
+      label: `A Token ${String(index).padStart(3, '0')}`,
+      moduleId: 'source-a',
+      moduleTitle: 'Source A',
+      tokenSrc: `modules/source-a/tokens/a-${index}.webp`,
+      searchText: `a token ${index} source a source-a`,
+    })),
+    ...Array.from({ length: 20 }, (_, index) => ({
+      id: `b-${index}`,
+      label: `B Token ${String(index).padStart(3, '0')}`,
+      moduleId: 'source-b',
+      moduleTitle: 'Source B',
+      tokenSrc: `modules/source-b/tokens/b-${index}.webp`,
+      searchText: `b token ${index} source b source-b`,
+    })),
+  ];
+  const sourceOptions = getPanelSourceFilterOptions(index);
+  const result = getPickerCandidatePool(
+    index,
+    {
+      excludedTagIds: new Set(),
+      favoritesOnly: false,
+      resultLimit: 120,
+      searchQuery: '',
+      selectedSourceIds: new Set(['source-a']),
+      selectedTagIds: new Set(),
+      tokenDocument: {},
+    },
+    {
+      favoriteIds: new Set(),
+      sourceOptions,
+    },
+  );
+
+  assert.equal(result.browseMode, true);
+  assert.equal(result.total, 130);
+  assert.equal(result.candidates.length, 120);
+  assert.equal(result.hasMore, true);
+  assert.ok(result.candidates.every((candidate) => candidate.moduleId === 'source-a'));
+});
+
 test('source filter accepts multiple selected modules and can treat empty as none for HUD clear all', () => {
   const candidates = [
     { id: 'a', moduleId: 'bestiary' },
@@ -1073,6 +1175,53 @@ test('source filter label summarizes all, none, one, or multiple selected source
   assert.equal(
     getSourceFilterLabel(options, ['bestiary', 'draconic', 'npc-core'], { emptyMeansAll: false }),
     'All sources',
+  );
+});
+
+test('favorite settings register as client preferences and normalize stored ids', () => {
+  const calls = [];
+  const settings = {
+    register: (...args) => calls.push(args),
+    get: () => ({ ids: ['b', 'a', 'a', '', null] }),
+  };
+
+  registerFavoriteSettings(settings);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'pf2e-tokener');
+  assert.equal(calls[0][1], 'favorites');
+  assert.equal(calls[0][2].scope, 'client');
+  assert.equal(calls[0][2].config, false);
+  assert.deepEqual([...getFavoriteIds(settings)], ['b', 'a']);
+});
+
+test('favorite candidate helper toggles ids and filters candidates', async () => {
+  let stored = { ids: ['dragon'] };
+  const settings = {
+    get: () => stored,
+    set: async (_moduleId, _key, value) => {
+      stored = value;
+    },
+  };
+  const candidates = [
+    { id: 'dragon', label: 'Dragon' },
+    { id: 'kobold', label: 'Kobold' },
+  ];
+
+  await toggleFavoriteCandidate(candidates[1], settings);
+
+  assert.deepEqual(stored, { ids: ['dragon', 'kobold'] });
+  assert.deepEqual(
+    filterFavoriteCandidates(candidates, getFavoriteIds(settings)).map((candidate) => candidate.id),
+    ['dragon', 'kobold'],
+  );
+
+  await toggleFavoriteCandidate(candidates[0], settings);
+
+  assert.deepEqual(stored, { ids: ['kobold'] });
+  assert.deepEqual(
+    filterFavoriteCandidates(candidates, getFavoriteIds(settings)).map((candidate) => candidate.id),
+    ['kobold'],
   );
 });
 
@@ -1130,6 +1279,171 @@ test('actor update writes prototype token fields and portrait only', () => {
     'prototypeToken.randomImg': false,
     img: 'modules/pkg/assets/art/dragon.webp',
   });
+});
+
+test('revert snapshot captures previous token, actor, and portrait art before applying changes', () => {
+  const tokenDocument = {
+    texture: {
+      src: 'old-token.webp',
+      scaleX: 0.75,
+      scaleY: 0.8,
+    },
+    randomImg: true,
+    ring: {
+      enabled: true,
+      subject: {
+        texture: 'old-subject.webp',
+        scale: 1.25,
+      },
+    },
+    actor: {
+      img: 'old-portrait.webp',
+      prototypeToken: {
+        texture: {
+          src: 'old-prototype-token.webp',
+          scaleX: 1.5,
+          scaleY: 1.25,
+        },
+        randomImg: false,
+        ring: {
+          enabled: false,
+          subject: {
+            texture: '',
+            scale: 1,
+          },
+        },
+      },
+    },
+  };
+
+  const snapshot = buildRevertSnapshot({
+    action: 'both',
+    candidate: {
+      label: 'New Dragon',
+      portraitSrc: 'new-portrait.webp',
+      tokenSrc: 'new-token.webp',
+    },
+    tokenDocument,
+  });
+
+  assert.equal(snapshot.action, 'both');
+  assert.equal(snapshot.label, 'New Dragon');
+  assert.deepEqual(snapshot.token, {
+    texture: {
+      src: 'old-token.webp',
+      scaleX: 0.75,
+      scaleY: 0.8,
+    },
+    randomImg: true,
+    ring: {
+      enabled: true,
+      subject: {
+        texture: 'old-subject.webp',
+        scale: 1.25,
+      },
+    },
+  });
+  assert.deepEqual(snapshot.actor.texture, {
+    src: 'old-prototype-token.webp',
+    scaleX: 1.5,
+    scaleY: 1.25,
+  });
+  assert.deepEqual(snapshot.portrait, {
+    img: 'old-portrait.webp',
+  });
+});
+
+test('revert updates restore token, actor prototype token, and actor portrait fields', () => {
+  const snapshot = {
+    token: {
+      texture: {
+        src: 'old-token.webp',
+        scaleX: 0.75,
+        scaleY: 0.8,
+      },
+      randomImg: true,
+      ring: {
+        enabled: false,
+        subject: {
+          texture: '',
+          scale: 1,
+        },
+      },
+    },
+    actor: {
+      texture: {
+        src: 'old-prototype-token.webp',
+        scaleX: 1.5,
+        scaleY: 1.25,
+      },
+      randomImg: false,
+      ring: {
+        enabled: true,
+        subject: {
+          texture: 'old-prototype-subject.webp',
+          scale: 1.4,
+        },
+      },
+    },
+    portrait: {
+      img: 'old-portrait.webp',
+    },
+  };
+
+  assert.deepEqual(buildTokenRevertUpdate(snapshot), {
+    'texture.src': 'old-token.webp',
+    'texture.scaleX': 0.75,
+    'texture.scaleY': 0.8,
+    randomImg: true,
+    'ring.enabled': false,
+    'ring.subject.texture': '',
+    'ring.subject.scale': 1,
+  });
+  assert.deepEqual(buildActorRevertUpdate(snapshot), {
+    'prototypeToken.texture.src': 'old-prototype-token.webp',
+    'prototypeToken.texture.scaleX': 1.5,
+    'prototypeToken.texture.scaleY': 1.25,
+    'prototypeToken.randomImg': false,
+    'prototypeToken.ring.enabled': true,
+    'prototypeToken.ring.subject.texture': 'old-prototype-subject.webp',
+    'prototypeToken.ring.subject.scale': 1.4,
+    img: 'old-portrait.webp',
+  });
+});
+
+test('last revert data can be read from selected token or actor flags', () => {
+  const tokenSnapshot = { action: 'token', time: 1, token: { texture: { src: 'old-token.webp' } } };
+  const actorSnapshot = { action: 'portrait', time: 2, portrait: { img: 'old-portrait.webp' } };
+
+  assert.equal(
+    getLastRevertData({
+      flags: {
+        'pf2e-tokener': {
+          lastRevert: tokenSnapshot,
+        },
+      },
+      actor: {
+        flags: {
+          'pf2e-tokener': {
+            lastRevert: actorSnapshot,
+          },
+        },
+      },
+    }),
+    actorSnapshot,
+  );
+  assert.equal(
+    getLastRevertData({
+      actor: {
+        flags: {
+          'pf2e-tokener': {
+            lastRevert: actorSnapshot,
+          },
+        },
+      },
+    }),
+    actorSnapshot,
+  );
 });
 
 test('HUD apply actions include separate token, actor, portrait, and both choices', () => {
@@ -1299,6 +1613,136 @@ test('GM Token HUD button opens ApplicationV2 picker instead of HUD child panel'
     globalThis.document = previousDocument;
     globalThis.foundry = previousFoundry;
     globalThis.game = previousGame;
+  }
+});
+
+test('Token HUD button highlights when Tokener override can be reverted', () => {
+  const previousDocument = globalThis.document;
+  const previousGame = globalThis.game;
+  const { root, target } = createFakeHudRoot();
+  const tokenDocument = {
+    canUserModify: () => true,
+    flags: {
+      'pf2e-tokener': {
+        lastRevert: {
+          token: {
+            texture: { src: 'old.webp', scaleX: 1, scaleY: 1 },
+            randomImg: false,
+            ring: { enabled: false, subject: { texture: '', scale: 1 } },
+          },
+        },
+      },
+    },
+  };
+
+  try {
+    globalThis.document = { createElement: createFakeElement };
+    globalThis.game = { user: { id: 'gm1', isGM: true } };
+
+    renderTokenHud({ object: { document: tokenDocument } }, root);
+    const button = target.children.find((child) => child.className.includes('pf2e-tokener-button'));
+
+    assert.match(button.className, /is-overridden/);
+    assert.equal(
+      button.dataset.tooltip,
+      'PF2e Tokener - right-click to revert last change.',
+    );
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.game = previousGame;
+  }
+});
+
+test('right-clicking active Token HUD button reverts last Tokener change', async () => {
+  const previousDocument = globalThis.document;
+  const previousGame = globalThis.game;
+  const previousUi = globalThis.ui;
+  const { root, target } = createFakeHudRoot();
+  const tokenUpdates = [];
+  const actorUpdates = [];
+  const messages = [];
+  const snapshot = {
+    action: 'both',
+    label: 'Dragon',
+    token: {
+      texture: { src: 'old-token.webp', scaleX: 1.2, scaleY: 1.3 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'old-subject.webp', scale: 1.4 } },
+    },
+    actor: {
+      texture: { src: 'old-prototype.webp', scaleX: 0.9, scaleY: 0.8 },
+      randomImg: false,
+      ring: { enabled: false, subject: { texture: '', scale: 1 } },
+    },
+    portrait: { img: 'old-portrait.webp' },
+    time: 10,
+  };
+  const tokenDocument = {
+    actor: {
+      async update(update) {
+        actorUpdates.push(update);
+      },
+    },
+    canUserModify: () => true,
+    flags: {
+      'pf2e-tokener': {
+        lastRevert: snapshot,
+      },
+    },
+    async update(update) {
+      tokenUpdates.push(update);
+    },
+  };
+
+  try {
+    globalThis.document = { createElement: createFakeElement };
+    globalThis.game = { user: { id: 'gm1', isGM: true } };
+    globalThis.ui = {
+      notifications: {
+        info: (message) => messages.push(message),
+        error: (message) => messages.push(message),
+      },
+    };
+
+    renderTokenHud({ object: { document: tokenDocument } }, root);
+    const button = target.children.find((child) => child.className.includes('pf2e-tokener-button'));
+    await button.listeners.contextmenu({
+      preventDefault() {},
+      stopPropagation() {},
+    });
+
+    assert.deepEqual(tokenUpdates, [
+      {
+        'texture.src': 'old-token.webp',
+        'texture.scaleX': 1.2,
+        'texture.scaleY': 1.3,
+        randomImg: false,
+        'ring.enabled': true,
+        'ring.subject.texture': 'old-subject.webp',
+        'ring.subject.scale': 1.4,
+        [REVERT_FLAG_PATH]: null,
+      },
+    ]);
+    assert.deepEqual(actorUpdates, [
+      {
+        'prototypeToken.texture.src': 'old-prototype.webp',
+        'prototypeToken.texture.scaleX': 0.9,
+        'prototypeToken.texture.scaleY': 0.8,
+        'prototypeToken.randomImg': false,
+        'prototypeToken.ring.enabled': false,
+        'prototypeToken.ring.subject.texture': '',
+        'prototypeToken.ring.subject.scale': 1,
+        img: 'old-portrait.webp',
+        [REVERT_FLAG_PATH]: null,
+      },
+    ]);
+    assert.deepEqual(messages, ['PF2e Tokener: previous art restored.']);
+    assert.doesNotMatch(button.className, /is-overridden/);
+    assert.equal(button.dataset.tooltip, 'PF2e Tokener');
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.game = previousGame;
+    globalThis.ui = previousUi;
   }
 });
 
@@ -1486,6 +1930,10 @@ test('English localization file contains Token HUD strings', () => {
   );
 
   assert.equal(translations['PF2ETokener.HUD.Tooltip'], 'PF2e Tokener');
+  assert.equal(
+    translations['PF2ETokener.HUD.RevertButtonTooltip'],
+    'PF2e Tokener - right-click to revert last change.',
+  );
   assert.equal(translations['PF2ETokener.HUD.SearchPlaceholder'], 'Search tokens');
   assert.equal(translations['PF2ETokener.HUD.AllSources'], 'All sources');
   assert.equal(translations['PF2ETokener.HUD.NoSources'], 'No sources');
@@ -1493,12 +1941,26 @@ test('English localization file contains Token HUD strings', () => {
   assert.equal(translations['PF2ETokener.HUD.SelectAllSources'], 'Select all');
   assert.equal(translations['PF2ETokener.HUD.ClearSources'], 'Clear all');
   assert.equal(translations['PF2ETokener.HUD.SourceSearchPlaceholder'], 'Search sources');
+  assert.equal(translations['PF2ETokener.HUD.Filters'], 'Filters');
   assert.equal(translations['PF2ETokener.HUD.Tags'], 'Tags');
   assert.equal(translations['PF2ETokener.HUD.TagSearchPlaceholder'], 'Search tags');
   assert.equal(translations['PF2ETokener.HUD.ClearTags'], 'Clear tags');
+  assert.equal(translations['PF2ETokener.HUD.ResetTags'], undefined);
+  assert.equal(translations['PF2ETokener.HUD.IncludeTag'], 'Include tag');
+  assert.equal(translations['PF2ETokener.HUD.ExcludeTag'], 'Exclude tag');
+  assert.equal(translations['PF2ETokener.HUD.Favorites'], 'Favorites');
+  assert.equal(translations['PF2ETokener.HUD.FavoritesTooltip'], 'Show only favorite token art.');
+  assert.equal(translations['PF2ETokener.HUD.AddFavorite'], 'Add favorite');
+  assert.equal(translations['PF2ETokener.HUD.RemoveFavorite'], 'Remove favorite');
+  assert.equal(translations['PF2ETokener.HUD.ShowMore'], 'Show more');
   assert.equal(translations['PF2ETokener.HUD.BestMatches'], 'Best matches');
   assert.equal(translations['PF2ETokener.HUD.SearchResults'], 'Search results');
   assert.equal(translations['PF2ETokener.HUD.Current'], 'Current');
+  assert.equal(translations['PF2ETokener.HUD.RevertLast'], 'Revert last');
+  assert.equal(
+    translations['PF2ETokener.HUD.RevertTooltip'],
+    'Restore the art from before the last Tokener change.',
+  );
   assert.equal(translations['PF2ETokener.Actions.Token'], 'Token');
   assert.equal(translations['PF2ETokener.Actions.Actor'], 'Actor');
   assert.equal(translations['PF2ETokener.Actions.Portrait'], 'Portrait');
@@ -1522,6 +1984,23 @@ test('English localization file contains Token HUD strings', () => {
   assert.equal(
     translations['PF2ETokener.Notifications.Applied'],
     'PF2e Tokener: token art applied.',
+  );
+  assert.equal(
+    translations['PF2ETokener.Notifications.ApplyFailed'],
+    'PF2e Tokener: failed to apply token art.',
+  );
+  assert.equal(
+    translations['PF2ETokener.Notifications.Reverted'],
+    'PF2e Tokener: previous art restored.',
+  );
+  assert.equal(
+    translations['PF2ETokener.Notifications.RevertFailed'],
+    'PF2e Tokener: failed to restore previous art.',
+  );
+  assert.equal(translations['PF2ETokener.Settings.Favorites.Name'], 'Favorite token art');
+  assert.equal(
+    translations['PF2ETokener.Settings.Favorites.Hint'],
+    'Token art marked as favorites in PF2e Tokener.',
   );
 });
 
@@ -1774,6 +2253,18 @@ test('token picker panel CSS uses canvas zoom variables', () => {
   assert.match(panelRule, /transform-origin:\s*top left;/);
 });
 
+test('Token HUD button has visible override active state styling', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const activeRule =
+    css.match(/#token-hud \.pf2e-tokener-button\.is-overridden\s*\{[^}]+\}/)?.[0] ?? '';
+  const markerRule =
+    css.match(/#token-hud \.pf2e-tokener-button\.is-overridden::after\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(activeRule, /color:\s*#d6b56d;/);
+  assert.match(activeRule, /box-shadow:/);
+  assert.match(markerRule, /background:\s*#d6b56d;/);
+});
+
 test('ApplicationV2 token picker CSS is scoped outside the Token HUD', () => {
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
   const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
@@ -1781,12 +2272,17 @@ test('ApplicationV2 token picker CSS is scoped outside the Token HUD', () => {
   const appPanelRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-panel\s*\{[^}]+\}/)?.[0] ?? '';
   const appContentRule =
     css.match(/\.pf2e-tokener-app \.pf2e-tokener-content\s*\{[^}]+\}/)?.[0] ?? '';
+  const windowContentRule =
+    css.match(/\.pf2e-tokener-app \.window-content\s*\{[^}]+\}/)?.[0] ?? '';
   const sourceMenuRule =
     css.match(/\.pf2e-tokener-app \.pf2e-tokener-source-menu\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.match(appPanelRule, /position:\s*relative;/);
   assert.match(appPanelRule, /transform:\s*none;/);
+  assert.match(windowContentRule, /background:\s*rgba\(18,\s*20,\s*23,\s*0\.94\);/);
   assert.match(appContentRule, /overflow:\s*auto;/);
+  assert.doesNotMatch(appContentRule, /max-height:\s*100%;/);
+  assert.match(appContentRule, /max-height:\s*min\(604px, calc\(100vh - 144px\)\);/);
   assert.match(template, /class=['"]{{source\.menuClassName}}['"]/);
   assert.match(sourceMenuRule, /position:\s*static;/);
   assert.match(sourceMenuRule, /width:\s*100%;/);
@@ -1794,55 +2290,171 @@ test('ApplicationV2 token picker CSS is scoped outside the Token HUD', () => {
   assert.doesNotMatch(picker, /getFloatingMenuPlacement/);
 });
 
-test('searchable tag drawer UI is rendered in the ApplicationV2 picker', () => {
+test('ApplicationV2 token picker keeps search, source, tags, and revert controls in a left sidebar', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const layoutRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-layout\s*\{[^}]+\}/)?.[0] ?? '';
+  const sidebarRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-sidebar\s*\{[^}]+\}/)?.[0] ?? '';
+  const contentRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-content\s*\{[^}]+\}/)?.[0] ?? '';
+
+  assert.match(picker, /width:\s*720/);
+  assert.match(template, /class=['"]pf2e-tokener-layout['"]/);
+  assert.match(template, /class=['"]pf2e-tokener-sidebar['"]/);
+  assert.ok(
+    template.indexOf("class='pf2e-tokener-sidebar'") <
+      template.indexOf("class='pf2e-tokener-content'"),
+  );
+  assert.match(
+    layoutRule,
+    /grid-template-columns:\s*minmax\(210px,\s*240px\) minmax\(0,\s*1fr\);/,
+  );
+  assert.match(sidebarRule, /align-content:\s*start;/);
+  assert.match(contentRule, /min-height:\s*0;/);
+  assert.match(template, /data-revert-action=['"]last['"]/);
+  assert.match(template, /data-favorites-filter=['"]toggle['"]/);
+});
+
+test('favorite controls render on token cards and in the sidebar filter row', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const filterRowRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-filter-row\s*\{[^}]+\}/)?.[0] ?? '';
+  const cardFavoriteRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-favorite-toggle\s*\{[^}]+\}/)?.[0] ?? '';
+  const activeFavoriteRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-favorite-toggle\.is-active\s*\{[^}]+\}/)?.[0] ??
+    '';
+
+  assert.match(picker, /favoritesOnly/);
+  assert.match(picker, /toggleFavoriteCandidate\(candidate\)/);
+  assert.match(picker, /filterFavoriteCandidates/);
+  assert.match(template, /pf2e-tokener-filter-row/);
+  assert.match(template, /data-favorites-filter=['"]toggle['"]/);
+  assert.match(template, /data-favorite-candidate-id=['"]{{viewId}}['"]/);
+  assert.match(template, /aria-pressed=['"]{{favoriteAriaPressed}}['"]/);
+  assert.match(filterRowRule, /grid-template-columns:\s*1fr;/);
+  assert.match(cardFavoriteRule, /position:\s*absolute;/);
+  assert.match(cardFavoriteRule, /top:\s*4px;/);
+  assert.match(activeFavoriteRule, /color:\s*#d6b56d;/);
+});
+
+test('accordion tag filter UI supports include and exclude chips', () => {
   const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
   const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
-  const tagBarRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-filter\s*\{[^}]+\}/)?.[0] ?? '';
-  const tagDrawerRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-drawer\s*\{[^}]+\}/)?.[0] ?? '';
-  const tagSearchRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-search\s*\{[^}]+\}/)?.[0] ?? '';
-  const tagGroupsRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-groups\s*\{[^}]+\}/)?.[0] ?? '';
-  const tagListRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-list\s*\{[^}]+\}/)?.[0] ?? '';
-  const tagOptionRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-option\s*\{[^}]+\}/)?.[0] ?? '';
+  const filterToolsRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-filter-tools\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagFacetRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagChipRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\s*\{[^}]+\}/)?.[0] ?? '';
+  const excludedRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\.is-excluded\s*\{[^}]+\}/)?.[0] ??
+    '';
 
   assert.match(picker, /prepareTagFilterView/);
+  assert.match(picker, /excludedTagIds/);
+  assert.match(picker, /selectedExcludedTagIds/);
   assert.match(template, /pf2e-tokener-tag-filter/);
+  assert.match(template, /pf2e-tokener-filter-panel/);
+  assert.match(template, /pf2e-tokener-filter-tools/);
   assert.match(template, /pf2e-tokener-tag-search/);
-  assert.match(template, /pf2e-tokener-tag-list-header/);
-  assert.match(template, /{{tags.countLabel}}/);
-  assert.doesNotMatch(template, /{{tags\.visibleCount}} \/ {{tags\.totalCount}}/);
-  assert.match(template, /data-tag-group=['"]{{id}}['"]/);
+  assert.match(template, /<details class=['"]pf2e-tokener-tag-facet {{className}}['"]/);
+  assert.match(template, /pf2e-tokener-tag-chip/);
   assert.match(template, /data-tag-action=['"]clear['"]/);
+  assert.doesNotMatch(template, /data-tag-action=['"]reset['"]/);
+  assert.doesNotMatch(template, /pf2e-tokener-filter-reset/);
   assert.match(template, /data-tag-id=['"]{{id}}['"]/);
-  assert.match(template, /{{displayCount}}/);
+  assert.match(template, /data-tag-exclude-id=['"]{{id}}['"]/);
   assert.match(picker, /selectedTagIds/);
   assert.match(picker, /getTagGroupSearchState\(group, tagFilter\)/);
-  assert.match(picker, /activeGroupTotal/);
   assert.match(
     picker,
-    /getTagListCountLabel\(visibleOptions\.length, activeGroupTotal, Boolean\(tagFilter\)\)/,
+    /buildCandidateSearchQuery\(app\?\.searchQuery, selectedTagIds, excludedTagIds\)/,
   );
   assert.doesNotMatch(picker, /app\.searchQuery = toggleTagFilterTerm/);
-  assert.match(tagBarRule, /display:\s*grid;/);
-  assert.match(
-    tagDrawerRule,
-    /grid-template-columns:\s*minmax\(118px, 0\.36fr\) minmax\(0, 1fr\);/,
+  assert.match(filterToolsRule, /grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+  assert.match(tagFacetRule, /border:\s*1px solid/);
+  assert.match(tagChipRule, /border-left:\s*0;/);
+  assert.match(excludedRule, /border-color:\s*rgba\(201,\s*106,\s*95/);
+});
+
+test('tag filter panel uses PF2e Tokener filter styling instead of Character Gallery styling', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const translations = JSON.parse(
+    fs.readFileSync(new URL('../languages/en.json', import.meta.url), 'utf8'),
   );
-  assert.match(tagDrawerRule, /grid-template-rows:\s*auto minmax\(0, 1fr\);/);
-  assert.match(tagSearchRule, /grid-column:\s*1 \/ -1;/);
-  assert.match(tagGroupsRule, /grid-column:\s*1 \/ 2;/);
-  assert.match(tagGroupsRule, /grid-row:\s*2 \/ 3;/);
-  assert.match(tagListRule, /grid-column:\s*2 \/ 3;/);
-  assert.match(tagListRule, /grid-template-rows:\s*auto minmax\(0, 1fr\);/);
-  assert.match(tagOptionRule, /grid-template-columns:\s*minmax\(0, 1fr\) auto;/);
-  assert.match(css, /\.pf2e-tokener-app \.pf2e-tokener-tag-group-button\.is-match\s*\{/);
-  assert.match(css, /\.pf2e-tokener-app \.pf2e-tokener-tag-group-button\.is-filtered-out\s*\{/);
+  const panelRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-filter-panel\s*\{[^}]+\}/)?.[0] ?? '';
+  const toolsRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-filter-tools\s*\{[^}]+\}/)?.[0] ?? '';
+  const facetRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet\s*\{[^}]+\}/)?.[0] ?? '';
+  const facetRuleBody =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet::before\s*\{[^}]+\}/)?.[0] ??
+    '';
+  const chipRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\s*\{[^}]+\}/)?.[0] ?? '';
+  const includedRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\.is-included\s*\{[^}]+\}/)?.[0] ??
+    '';
+
+  assert.equal(translations['PF2ETokener.HUD.Filters'], 'Filters');
+  assert.match(template, /pf2e-tokener-filter-panel/);
+  assert.match(template, /pf2e-tokener-filter-tools/);
+  assert.doesNotMatch(template, /pf2e-tokener-tag-header/);
+  assert.match(panelRule, /background:\s*linear-gradient/);
+  assert.match(toolsRule, /grid-template-columns:\s*minmax\(0,\s*1fr\);/);
+  assert.match(facetRule, /position:\s*relative;/);
+  assert.match(facetRuleBody, /background:\s*#6fa8c8;/);
+  assert.match(chipRule, /border-left:\s*0;/);
+  assert.doesNotMatch(chipRule, /#d6b56d/);
+  assert.match(includedRule, /border-color:\s*rgba\(111,\s*168,\s*200/);
+});
+
+test('filter panel keeps search above a scrollable tag category list', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const tagGroupsRules = [
+    ...css.matchAll(/\.pf2e-tokener-app \.pf2e-tokener-tag-groups\s*\{[^}]+\}/g),
+  ].map((match) => match[0]);
+  const finalTagGroupsRule = tagGroupsRules.at(-1) ?? '';
+  const filterPanelRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-filter-panel\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagFacetRule =
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagOptionsRules = [
+    ...css.matchAll(/\.pf2e-tokener-app \.pf2e-tokener-tag-options\s*\{[^}]+\}/g),
+  ].map((match) => match[0]);
+  const finalTagOptionsRule = tagOptionsRules.at(-1) ?? '';
+
+  assert.ok(
+    template.indexOf("class='pf2e-tokener-filter-tools'") <
+      template.indexOf("class='pf2e-tokener-tag-groups'"),
+  );
+  assert.match(filterPanelRule, /min-height:\s*0;/);
+  assert.match(finalTagGroupsRule, /grid-row:\s*auto;/);
+  assert.match(finalTagGroupsRule, /max-height:\s*min\(300px, calc\(100vh - 390px\)\);/);
+  assert.match(finalTagGroupsRule, /overflow-y:\s*auto;/);
+  assert.match(tagFacetRule, /display:\s*block;/);
+  assert.match(tagFacetRule, /overflow:\s*visible;/);
+  assert.match(finalTagOptionsRule, /overflow:\s*visible;/);
+});
+
+test('picker result paging renders show more when filters match more than the render cap', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+
+  assert.match(picker, /resultLimit/);
+  assert.match(picker, /data-results-action/);
+  assert.match(template, /data-results-action=['"]more['"]/);
+  assert.match(template, /{{paging\.showMoreLabel}}/);
 });
 
 test('image preview helper returns actor and token panes side by side', () => {
@@ -1865,6 +2477,24 @@ test('image preview helper returns actor and token panes side by side', () => {
       available: true,
     },
   ]);
+});
+
+test('image preview helper groups associated tags for display', () => {
+  assert.deepEqual(
+    getCandidatePreviewTagGroups({
+      tags: {
+        ancestry: ['human'],
+        category: ['humanoid'],
+        equipment: ['clothing', 'firearm'],
+      },
+    }),
+    [
+      { label: 'Category', values: ['HUMANOID'] },
+      { label: 'Ancestry', values: ['HUMAN'] },
+      { label: 'Equipment', values: ['CLOTHING', 'FIREARM'] },
+    ],
+  );
+  assert.deepEqual(getCandidatePreviewTagGroups({}), []);
 });
 
 test('image preview helper hides missing image panes', () => {

@@ -2,6 +2,26 @@
   position: relative;
 }
 
+#token-hud .pf2e-tokener-button.is-overridden {
+  color: #d6b56d;
+  border-color: rgba(214, 181, 109, 0.9);
+  box-shadow:
+    inset 0 0 0 1px rgba(214, 181, 109, 0.35),
+    0 0 10px rgba(214, 181, 109, 0.28);
+}
+
+#token-hud .pf2e-tokener-button.is-overridden::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  background: #d6b56d;
+  border-radius: 999px;
+  box-shadow: 0 0 6px rgba(214, 181, 109, 0.7);
+}
+
 #token-hud .pf2e-tokener-panel {
   position: absolute;
   top: 0;
@@ -351,6 +371,7 @@
 
 .pf2e-tokener-app .window-content {
   padding: 0;
+  background: rgba(18, 20, 23, 0.94);
   overflow: visible;
 }
 
@@ -380,12 +401,27 @@
   transform: none;
 }
 
+.pf2e-tokener-app .pf2e-tokener-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 240px) minmax(0, 1fr);
+  gap: 8px;
+  min-height: 260px;
+  max-height: min(604px, calc(100vh - 144px));
+}
+
+.pf2e-tokener-app .pf2e-tokener-sidebar {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+
 .pf2e-tokener-app .pf2e-tokener-toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(112px, 148px) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
   align-items: center;
-  margin-bottom: 8px;
 }
 
 .pf2e-tokener-app .pf2e-tokener-toolbar input,
@@ -400,6 +436,10 @@
   border-radius: 4px;
   font-size: 15px;
   line-height: 1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-search {
+  grid-column: 1 / -1;
 }
 
 .pf2e-tokener-app .pf2e-tokener-source-filter {
@@ -419,8 +459,8 @@
   position: static;
   display: none;
   width: 100%;
-  max-height: min(260px, calc(100vh - 180px));
-  margin: -2px 0 8px;
+  max-height: min(220px, calc(100vh - 260px));
+  margin: -2px 0 0;
   padding: 6px;
   overflow-y: auto;
   background: rgba(14, 16, 19, 0.98);
@@ -530,11 +570,17 @@
   text-align: right;
 }
 
+.pf2e-tokener-app .pf2e-tokener-filter-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 5px;
+}
+
 .pf2e-tokener-app .pf2e-tokener-tag-filter {
   position: relative;
   display: grid;
-  gap: 6px;
-  margin: 0 0 8px;
+  gap: 7px;
+  margin: 0;
 }
 
 .pf2e-tokener-app .pf2e-tokener-tag-filter.is-empty {
@@ -543,7 +589,7 @@
 
 .pf2e-tokener-app .pf2e-tokener-tag-summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 5px;
   align-items: start;
 }
@@ -559,7 +605,33 @@
   line-height: 1;
 }
 
+.pf2e-tokener-app .pf2e-tokener-favorites-filter-button {
+  height: 24px;
+  min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(31, 77, 101, 0.8);
+  border: 1px solid rgba(143, 185, 214, 0.42);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-favorites-filter-button.is-active {
+  color: #11181c;
+  background: #d6b56d;
+  border-color: #d6b56d;
+}
+
+.pf2e-tokener-app .pf2e-tokener-favorites-filter-button.is-empty {
+  opacity: 0.72;
+}
+
 .pf2e-tokener-app .pf2e-tokener-clear-tags {
+  grid-column: 1 / -1;
   height: 24px;
   padding: 0 8px;
   color: var(--color-text-light-highlight, #f5f2e8);
@@ -573,31 +645,32 @@
 .pf2e-tokener-app .pf2e-tokener-active-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
 .pf2e-tokener-app .pf2e-tokener-active-tag {
   max-width: 140px;
-  height: 24px;
+  height: 22px;
   padding: 0 7px;
   overflow: hidden;
   color: #11181c;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: #8fb9d6;
-  border: 1px solid #8fb9d6;
-  border-radius: 999px;
-  font-size: 11px;
+  background: #9fc4dc;
+  border: 1px solid rgba(111, 168, 200, 0.85);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
   line-height: 1;
 }
 
 .pf2e-tokener-app .pf2e-tokener-tag-drawer {
   display: none;
-  grid-template-columns: minmax(118px, 0.36fr) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 6px;
-  max-height: min(260px, calc(100vh - 230px));
+  max-height: min(360px, calc(100vh - 330px));
   padding: 7px;
   overflow: hidden;
   background: rgba(14, 16, 19, 0.86);
@@ -611,7 +684,7 @@
 }
 
 .pf2e-tokener-app .pf2e-tokener-tag-search {
-  grid-column: 1 / -1;
+  grid-column: 1 / 2;
   width: 100%;
   height: 28px;
   min-width: 0;
@@ -632,12 +705,13 @@
 .pf2e-tokener-app .pf2e-tokener-tag-groups {
   grid-column: 1 / 2;
   grid-row: 2 / 3;
+  max-height: 112px;
 }
 
 .pf2e-tokener-app .pf2e-tokener-tag-list {
   display: grid;
-  grid-column: 2 / 3;
-  grid-row: 2 / 3;
+  grid-column: 1 / 2;
+  grid-row: 3 / 4;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 5px;
   min-height: 0;
@@ -742,8 +816,227 @@
   font-size: 10px;
 }
 
+.pf2e-tokener-app .pf2e-tokener-filter-panel {
+  min-height: 0;
+  padding: 8px;
+  background: linear-gradient(180deg, rgba(18, 22, 26, 0.92), rgba(11, 14, 17, 0.9));
+  border: 1px solid rgba(111, 168, 200, 0.18);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+}
+
+.pf2e-tokener-app .pf2e-tokener-filter-title h3 {
+  margin: 0;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-filter-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid rgba(214, 181, 109, 0.34);
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-header h3 {
+  margin: 0;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-groups {
+  grid-column: auto;
+  grid-row: auto;
+  max-height: min(300px, calc(100vh - 390px));
+  overflow-y: auto;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-facet {
+  position: relative;
+  display: block;
+  padding: 0 0 6px 6px;
+  overflow: visible;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(111, 168, 200, 0.14);
+  border-radius: 5px;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-facet::before {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 2px;
+  background: #6fa8c8;
+  border-radius: 999px;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-facet + .pf2e-tokener-tag-facet {
+  margin-top: 4px;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-facet.is-filtered-out {
+  opacity: 0.45;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-facet-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 26px;
+  padding: 5px 6px 3px;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  list-style: none;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-facet-summary::-webkit-details-marker {
+  display: none;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-facet-summary span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: none;
+  padding: 0 6px;
+  overflow: visible;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-option {
+  display: inline-grid;
+  grid-template-columns: minmax(0, auto) 20px;
+  gap: 2px;
+  min-height: 0;
+  padding: 0;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-chip {
+  max-width: 136px;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  overflow: hidden;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 0;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-chip.is-included {
+  color: #eaf6ff;
+  background: rgba(111, 168, 200, 0.2);
+  border-color: rgba(111, 168, 200, 0.66);
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-chip.is-muted {
+  opacity: 0.5;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-chip.is-excluded {
+  color: #f2d4cf;
+  background: rgba(130, 48, 42, 0.32);
+  border-color: rgba(201, 106, 95, 0.72);
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-exclude {
+  width: 20px;
+  height: 22px;
+  padding: 0;
+  color: var(--color-text-light-6, #cfc6b8);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-left: 0;
+  border-radius: 3px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-tag-exclude.is-excluded {
+  color: #f2d4cf;
+  background: rgba(130, 48, 42, 0.52);
+  border-color: rgba(201, 106, 95, 0.65);
+}
+
+.pf2e-tokener-app .pf2e-tokener-active-tag.is-excluded {
+  color: #f2d4cf;
+  background: rgba(130, 48, 42, 0.52);
+  border-color: rgba(201, 106, 95, 0.65);
+}
+
+.pf2e-tokener-app .pf2e-tokener-show-more {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-top: 4px;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  background: rgba(31, 77, 101, 0.85);
+  border: 1px solid rgba(143, 185, 214, 0.45);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.pf2e-tokener-app .pf2e-tokener-revert {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pf2e-tokener-app .pf2e-tokener-revert-button {
+  height: 26px;
+  padding: 0 8px;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  background: rgba(31, 77, 101, 0.8);
+  border: 1px solid rgba(143, 185, 214, 0.42);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-revert-detail {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-light-6, #cfc6b8);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
 .pf2e-tokener-app .pf2e-tokener-content {
-  max-height: min(530px, calc(100vh - 188px));
+  min-height: 0;
+  max-height: min(604px, calc(100vh - 144px));
   padding-right: 2px;
   overflow: auto;
 }
@@ -762,12 +1055,13 @@
 
 .pf2e-tokener-app .pf2e-tokener-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   align-items: start;
   gap: 6px;
 }
 
 .pf2e-tokener-app .pf2e-tokener-card {
+  position: relative;
   display: grid;
   grid-template-rows: 54px 0 auto auto auto;
   gap: 3px;
@@ -778,6 +1072,34 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 5px;
   outline: none;
+}
+
+.pf2e-tokener-app .pf2e-tokener-favorite-toggle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--color-text-light-6, #cfc6b8);
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  z-index: 1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-favorite-toggle.is-active {
+  color: #d6b56d;
+  border-color: rgba(214, 181, 109, 0.72);
+}
+
+.pf2e-tokener-app .pf2e-tokener-favorite-toggle:hover,
+.pf2e-tokener-app .pf2e-tokener-favorite-toggle:focus-visible {
+  background: rgba(31, 77, 101, 0.9);
 }
 
 .pf2e-tokener-app .pf2e-tokener-card:hover,
@@ -930,7 +1252,7 @@
 
 .pf2e-tokener-preview-dialog {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 14px;
   width: min(1280px, 96vw);
   height: min(860px, 94vh);
@@ -1014,6 +1336,47 @@
   color: var(--color-text-light-6, #cfc6b8);
   text-align: center;
   font-size: 14px;
+}
+
+.pf2e-tokener-preview-tags {
+  display: grid;
+  gap: 6px;
+  max-height: 170px;
+  overflow-y: auto;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.pf2e-tokener-preview-tag-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.25fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-height: 28px;
+}
+
+.pf2e-tokener-preview-tag-label {
+  color: var(--color-text-light-highlight, #f5f2e8);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pf2e-tokener-preview-tag-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: end;
+}
+
+.pf2e-tokener-preview-tag-chip {
+  padding: 3px 6px;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  background: rgba(255, 255, 255, 0.08);
+  border-left: 2px solid #d6b56d;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 @media (max-width: 520px) {

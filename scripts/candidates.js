@@ -97,6 +97,7 @@ export function searchCandidates(index, query = '', { limit = DEFAULT_LIMIT } = 
     const haystack = candidate.searchText || buildSearchText(candidate);
     if (search.terms.length && !search.terms.every((term) => haystack.includes(term))) continue;
     if (!search.tagFilters.every((filter) => candidateHasTag(candidate, filter))) continue;
+    if (search.excludedTagFilters.some((filter) => candidateHasTag(candidate, filter))) continue;
 
     const label = normalizeSearchText(candidate.label);
     const matchedTags = getMatchedTags(candidate, search);
@@ -109,7 +110,8 @@ export function searchCandidates(index, query = '', { limit = DEFAULT_LIMIT } = 
       else if (haystack.includes(term)) score += 3;
     }
     score += search.tagFilters.length * 16;
-    if (!search.terms.length && !search.tagFilters.length) score = 1;
+    if (!search.terms.length && !search.tagFilters.length && !search.excludedTagFilters.length)
+      score = 1;
     rows.push({ candidate, matchedTags, score });
   }
 
@@ -127,7 +129,12 @@ export function searchCandidates(index, query = '', { limit = DEFAULT_LIMIT } = 
   }));
 }
 
-export function getCandidatesForTokenDocument(index, tokenDocument, query = '') {
+export function getCandidatesForTokenDocument(
+  index,
+  tokenDocument,
+  query = '',
+  { limit = DEFAULT_LIMIT } = {},
+) {
   const actor = getDocumentActor(tokenDocument);
   const actorName = normalizeLabel(actor?.name || tokenDocument?.name || '');
   const normalizedActorName = normalizeSearchText(actorName);
@@ -157,7 +164,7 @@ export function getCandidatesForTokenDocument(index, tokenDocument, query = '') 
     }
   }
 
-  for (const candidate of searchCandidates(index, fallbackQuery)) {
+  for (const candidate of searchCandidates(index, fallbackQuery, { limit })) {
     add(candidate, 'search');
   }
 
@@ -290,19 +297,25 @@ function tagSearchText(tags) {
 function parseCandidateSearch(query) {
   const terms = [];
   const tagFilters = [];
+  const excludedTagFilters = [];
   for (const rawPart of String(query ?? '')
     .split(/\s+/)
     .filter(Boolean)) {
-    const tagMatch = rawPart.match(/^([a-z][\w-]*):(.+)$/i);
+    const tagMatch = rawPart.match(/^([!-]?)([a-z][\w-]*):(.+)$/i);
     if (tagMatch) {
-      const group = normalizeSearchText(tagMatch[1]);
-      const value = normalizeSearchText(tagMatch[2]);
-      if (group && value) tagFilters.push({ group, value });
+      const excluded = tagMatch[1] === '!' || tagMatch[1] === '-';
+      const group = normalizeSearchText(tagMatch[2]);
+      const value = normalizeSearchText(tagMatch[3]);
+      if (group && value) {
+        const filter = { group, value };
+        if (excluded) excludedTagFilters.push(filter);
+        else tagFilters.push(filter);
+      }
       continue;
     }
     terms.push(...splitTerms(rawPart));
   }
-  return { tagFilters, terms };
+  return { excludedTagFilters, tagFilters, terms };
 }
 
 function candidateHasTag(candidate, filter) {

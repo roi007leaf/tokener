@@ -1,3 +1,8 @@
+import {
+  getLastRevertData,
+  hasRevertTargets,
+  revertLastTokenerChange,
+} from './actions.js';
 import { openTokenPicker, updateOpenPanelsCanvasZoom } from './picker-app.js';
 import { localize, normalizeHudElement } from './utils.js';
 
@@ -12,16 +17,46 @@ export function renderTokenHud(app, html) {
 
   const target = root.querySelector('.col.right') ?? root.querySelector('.right') ?? root;
   const button = document.createElement('div');
-  button.className = 'control-icon pf2e-tokener-button';
+  setHudButtonRevertState(button, tokenDocument);
   button.dataset.action = 'pf2e-tokener';
-  button.dataset.tooltip = localize('HUD.Tooltip', 'PF2e Tokener');
   button.innerHTML = '<i class="fas fa-images"></i>';
   button.addEventListener('click', async (event) => {
     event.preventDefault();
     event.stopPropagation();
     await openTokenPicker(tokenDocument);
   });
+  button.addEventListener('contextmenu', async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    await revertFromHudButton(button, tokenDocument);
+  });
   target.append(button);
+}
+
+function setHudButtonRevertState(button, tokenDocument) {
+  const hasRevert = hasRevertTargets(getLastRevertData(tokenDocument));
+  button.className = `control-icon pf2e-tokener-button${hasRevert ? ' is-overridden' : ''}`;
+  button.dataset.tooltip = hasRevert
+    ? localize('HUD.RevertButtonTooltip', 'PF2e Tokener - right-click to revert last change.')
+    : localize('HUD.Tooltip', 'PF2e Tokener');
+}
+
+async function revertFromHudButton(button, tokenDocument) {
+  if (!hasRevertTargets(getLastRevertData(tokenDocument))) return;
+
+  try {
+    const reverted = await revertLastTokenerChange(tokenDocument);
+    if (!reverted) return;
+    setHudButtonRevertState(button, null);
+    globalThis.ui?.notifications?.info?.(
+      localize('Notifications.Reverted', 'PF2e Tokener: previous art restored.'),
+    );
+  } catch (error) {
+    console.error('pf2e-tokener | Failed to revert token art from HUD button', error);
+    globalThis.ui?.notifications?.error?.(
+      localize('Notifications.RevertFailed', 'PF2e Tokener: failed to restore previous art.'),
+    );
+  }
 }
 
 function getHudTokenDocument(app) {

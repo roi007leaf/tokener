@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.1 - 2026-05-06
+
+### New
+
+- Added favorites for token art results.
+- Added a star button on each result card so preferred art can be marked quickly.
+- Added a `Favorites` filter beside `Tags` to show only starred art.
+- Added tag exclusion so unwanted traits, gear, families, or categories can be filtered out.
+- Added `Show more` paging when source, tag, or favorites browsing has more than 120 matches.
+- Added associated tags to the right-click fullscreen preview.
+- Added a highlighted HUD button state when the selected token or actor has a Tokener change that can be reverted.
+- Added right-click revert on the highlighted HUD button.
+- Favorites are saved per Foundry client, so each user can keep their own preferred art list.
+
+### Improved
+
+- Reworked the tag picker into a distinct `Filters` panel with grouped tag facets.
+- Selecting a source, tag, excluded tag, or favorites filter with an empty search now browses matching art automatically.
+- Search, sources, tags, favorites, and revert controls now live in the left sidebar so token results keep more space in the picker.
+
 ## 1.0.0 - 2026-05-05
 
 Initial release of PF2e Tokener.
@@ -16,6 +36,7 @@ Initial release of PF2e Tokener.
 - Added broader search results for related names and terms.
 - Added tag-aware search for supported galleries, including searches like `ancestry:human`, `equipment:sword`, `family:warrior`, `category:humanoid`, and `tag:magic`.
 - Added a visible `Tags` picker for browsing and applying tag filters without knowing the exact search syntax.
+- Added a `Revert last` control to restore art from before the last Tokener action on the selected token or actor.
 - Added matched tag chips on search results when tags helped find that art.
 - Added multi-source filtering so you can search one token pack or several token packs at once.
 - Added result counts and current-token markers.
@@ -42,6 +63,7 @@ Initial release of PF2e Tokener.
 - Search can now find results from other enabled token packs even when the selected token came from a different source.
 - Tag browsing now uses all discovered datasheet tags instead of only a short top-tag list.
 - Tag browsing now has grouped categories, tag search, active tag chips, and a clear-tags button.
+- Search, sources, tags, and revert controls now live in a left sidebar so token results get more of the picker window.
 - Selected tags now stay as chips instead of being inserted into the main search text.
 - The search box now starts empty while best matches still use the selected token automatically.
 - Token datasheets are now discovered from common datasheet folders in token modules, so more installed token packs can contribute searchable tags.

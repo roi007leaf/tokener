@@ -4,6 +4,8 @@ PF2e Tokener adds a fast token image picker to the Foundry VTT Token HUD for Pat
 
 When you select a token, open its HUD, and click the PF2e Tokener button, you get a searchable gallery of token art from your enabled token modules. The gallery opens as a Foundry window, so it stays in place while you pan or zoom the canvas. Pick an image, choose what to update, and keep playing.
 
+Search, source filters, tags, favorites, and undo controls sit in a left sidebar so the result grid keeps most of the window space for token art.
+
 ## Who This Is For
 
 PF2e Tokener is for GMs who use several PF2e token art modules and want a quicker way to swap token art during prep or play.
@@ -14,6 +16,7 @@ Use it when you want to:
 - Swap a scene token without opening the token sheet.
 - Update an actor portrait and token from the same place.
 - Search across several installed token packs at once.
+- Keep preferred art one click away with favorites.
 - Compare the portrait and token art before choosing.
 
 ## Compatibility
@@ -57,8 +60,9 @@ PF2e Tokener does not include token art by itself. It uses art from other enable
 3. Click the PF2e Tokener image button.
 4. Search for a creature, NPC, or art source.
 5. Use the source filter if you want to limit results to one or more token packs.
-6. Click a thumbnail to show the action buttons.
-7. Choose what you want to update.
+6. Mark useful results with the star button if you want to find them again quickly.
+7. Click a thumbnail to show the action buttons.
+8. Choose what you want to update.
 
 ## Action Buttons
 
@@ -77,6 +81,22 @@ Use `Portrait` when you only want the actor sheet image to change.
 
 Use `Both` when you want the current token and the actor's default token to match.
 
+## Reverting Changes
+
+After PF2e Tokener changes token or actor art, it remembers what was there before that change.
+
+Use `Revert last` in the left sidebar to restore the previous art for the last Tokener action on that selected token or actor.
+
+When a token or actor has a Tokener change that can be reverted, the PF2e Tokener HUD button is highlighted. Right-click that highlighted HUD button to revert without opening the picker.
+
+This can restore:
+
+- the selected scene token image
+- the actor's default token image
+- the actor portrait
+
+PF2e Tokener stores one recent revert point for the selected token or actor. Making another Tokener change replaces that revert point.
+
 ## Previewing Art
 
 Right-click any result to open a fullscreen preview.
@@ -85,6 +105,7 @@ The preview shows:
 
 - actor portrait image on the left
 - token image on the right
+- associated tags below the image, grouped by category
 
 Close the preview with:
 
@@ -107,9 +128,13 @@ You can search by:
 
 Some gallery modules include tags. For example, a search like `human sword warrior` can find art tagged with those ideas even when they are not all in the character name.
 
-Use the `Tags` button under the search bar to browse available tags. Tags are grouped by category, such as ancestry, equipment, family, features, and special traits. The tag browser has its own search box, so you can quickly narrow a long list of tags without changing your main token search.
+Use the `Filters` panel in the left sidebar to browse available tags. Tags are grouped by category, such as ancestry, equipment, family, features, and special traits. The filter panel has its own search box, so you can quickly narrow a long list of tags without changing your main token search.
 
 Selecting a tag filters the results without changing the text in the main search box. Active tags appear as small chips and can be removed one at a time or cleared together.
+
+You can also exclude tags. Use the small minus button beside a tag to hide art with that tag. Included tags are shown with `+`; excluded tags are shown with `-`.
+
+When you select a source, tag, excluded tag, or favorites filter while the search box is empty, PF2e Tokener browses all matching art instead of staying locked to the selected token. It shows the first 120 results and offers `Show more` when more matches are available.
 
 You can also use direct tag searches:
 
@@ -118,10 +143,20 @@ You can also use direct tag searches:
 - `family:warrior`
 - `category:humanoid`
 - `tag:magic`
+- `!equipment:firearm`
+- `-family:undead`
 
 When a tag helped match a result, PF2e Tokener shows the matched tags as small chips on that result.
 
 Best matches appear first. Broader results appear below them.
+
+## Favorites
+
+Click the star on any result to mark that art as a favorite.
+
+Use the `Favorites` button in the left sidebar to show only your favorite token art. Click it again to return to the full result list.
+
+Favorites are saved for your Foundry client. They are personal to you and do not change the world for other users.
 
 Result cards show the art name. Hover a shortened card name to see the full name and the source module.
 

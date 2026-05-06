@@ -1,16 +1,24 @@
 import { MODULE_ID } from './constants.js';
+import { registerFavoriteSettings } from './favorites.js';
 import { installApi, rebuildIndex, state } from './foundry-index.js';
 import { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 
 export { MODULE_ID } from './constants.js';
 export {
   buildActorUpdate,
+  buildActorRevertUpdate,
+  buildRevertSnapshot,
   buildTokenUpdate,
+  buildTokenRevertUpdate,
   getApplyActions,
   getApplyActionsForCandidate,
   getApplyTargets,
   getCandidatePreviewSrc,
   getCandidatePreviewSources,
+  getLastRevertData,
+  hasRevertTargets,
+  REVERT_FLAG_PATH,
+  revertLastTokenerChange,
 } from './actions.js';
 export {
   createDatasheetCandidates,
@@ -20,16 +28,24 @@ export {
   getCandidatesForTokenDocument,
   searchCandidates,
 } from './candidates.js';
+export {
+  filterFavoriteCandidates,
+  getFavoriteIds,
+  isFavoriteCandidate,
+  registerFavoriteSettings,
+  toggleFavoriteCandidate,
+} from './favorites.js';
 export { ensureIndex, rebuildIndex, state } from './foundry-index.js';
 export { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 export {
   buildCandidateSearchQuery,
   getTokenPickerApplicationClass,
+  getPickerCandidatePool,
   openTokenPicker,
   resolveApplicationV2Class,
   resolveHandlebarsApplicationMixin,
 } from './picker-app.js';
-export { getImagePreviewItems, openImagePreview } from './preview.js';
+export { getCandidatePreviewTagGroups, getImagePreviewItems, openImagePreview } from './preview.js';
 export {
   filterSourceOptionsByQuery,
   filterCandidatesBySources,
@@ -58,6 +74,10 @@ export {
 function registerFoundryIntegration() {
   const hooks = globalThis.Hooks;
   if (!hooks || typeof hooks.once !== 'function') return;
+
+  hooks.once('init', () => {
+    registerFavoriteSettings();
+  });
 
   hooks.once('ready', async () => {
     installApi();

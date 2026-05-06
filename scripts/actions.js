@@ -1,4 +1,8 @@
-import { localize, normalizePath, numberOr } from './utils.js';
+import { MODULE_ID } from './constants.js';
+import { getDocumentActor, isObject, localize, normalizePath, numberOr } from './utils.js';
+
+export const REVERT_FLAG_KEY = 'lastRevert';
+export const REVERT_FLAG_PATH = `flags.${MODULE_ID}.${REVERT_FLAG_KEY}`;
 
 export function getApplyActions() {
   return [
@@ -107,6 +111,130 @@ export function buildActorUpdate(candidate) {
   }
   if (candidate?.portraitSrc) actorUpdate.img = candidate.portraitSrc;
   return actorUpdate;
+}
+
+export function buildRevertSnapshot({ action, candidate, tokenDocument } = {}) {
+  const actor = getDocumentActor(tokenDocument);
+  const targets = getApplyTargets(action);
+  const actorUpdate = targets.actor && candidate ? buildActorUpdate(candidate) : {};
+  const changesPortrait =
+    targets.portrait || Object.prototype.hasOwnProperty.call(actorUpdate, 'img');
+  return {
+    action,
+    label: candidate?.label ?? '',
+    time: Date.now(),
+    token: targets.token ? captureTokenState(tokenDocument) : undefined,
+    actor: targets.actor && actor ? captureTokenState(actor.prototypeToken) : undefined,
+    portrait: changesPortrait && actor ? { img: actor.img ?? actor._source?.img ?? '' } : undefined,
+  };
+}
+
+export function getLastRevertData(tokenDocument) {
+  const actor = getDocumentActor(tokenDocument);
+  const tokenSnapshot = readFlag(tokenDocument, REVERT_FLAG_KEY);
+  const actorSnapshot = readFlag(actor, REVERT_FLAG_KEY);
+  if (tokenSnapshot && actorSnapshot) {
+    return numberOr(actorSnapshot.time, 0) > numberOr(tokenSnapshot.time, 0)
+      ? actorSnapshot
+      : tokenSnapshot;
+  }
+  return tokenSnapshot ?? actorSnapshot ?? null;
+}
+
+export function buildTokenRevertUpdate(snapshot) {
+  if (!isObject(snapshot?.token)) return {};
+  return tokenStateToUpdate(snapshot.token);
+}
+
+export function buildActorRevertUpdate(snapshot) {
+  const update = {};
+  if (isObject(snapshot?.actor)) {
+    for (const [key, value] of Object.entries(tokenStateToUpdate(snapshot.actor))) {
+      update[`prototypeToken.${key}`] = value;
+    }
+  }
+  if (isObject(snapshot?.portrait)) update.img = snapshot.portrait.img ?? '';
+  return update;
+}
+
+export function hasRevertTargets(snapshot) {
+  return Boolean(
+    isObject(snapshot?.token) || isObject(snapshot?.actor) || isObject(snapshot?.portrait),
+  );
+}
+
+export async function revertLastTokenerChange(tokenDocument) {
+  const actor = getDocumentActor(tokenDocument);
+  const snapshot = getLastRevertData(tokenDocument);
+  if (!hasRevertTargets(snapshot)) return false;
+
+  if (snapshot.token && tokenDocument?.update) {
+    await tokenDocument.update({
+      ...buildTokenRevertUpdate(snapshot),
+      [REVERT_FLAG_PATH]: null,
+    });
+  }
+
+  if ((snapshot.actor || snapshot.portrait) && actor?.update) {
+    await actor.update({
+      ...buildActorRevertUpdate(snapshot),
+      [REVERT_FLAG_PATH]: null,
+    });
+  }
+
+  return true;
+}
+
+function captureTokenState(documentLike) {
+  return {
+    texture: {
+      src: normalizePath(readDocumentPath(documentLike, 'texture.src')).trim(),
+      scaleX: numberOr(readDocumentPath(documentLike, 'texture.scaleX'), 1),
+      scaleY: numberOr(readDocumentPath(documentLike, 'texture.scaleY'), 1),
+    },
+    randomImg: Boolean(readDocumentPath(documentLike, 'randomImg')),
+    ring: {
+      enabled: Boolean(readDocumentPath(documentLike, 'ring.enabled')),
+      subject: {
+        texture: normalizePath(readDocumentPath(documentLike, 'ring.subject.texture')).trim(),
+        scale: numberOr(readDocumentPath(documentLike, 'ring.subject.scale'), 1),
+      },
+    },
+  };
+}
+
+function tokenStateToUpdate(state) {
+  const subjectTexture = normalizePath(state?.ring?.subject?.texture).trim();
+  return {
+    'texture.src': normalizePath(state?.texture?.src).trim(),
+    'texture.scaleX': numberOr(state?.texture?.scaleX, 1),
+    'texture.scaleY': numberOr(state?.texture?.scaleY, 1),
+    randomImg: Boolean(state?.randomImg),
+    'ring.enabled': Boolean(state?.ring?.enabled),
+    'ring.subject.texture': subjectTexture,
+    'ring.subject.scale': numberOr(state?.ring?.subject?.scale, 1),
+  };
+}
+
+function readDocumentPath(documentLike, path) {
+  if (!documentLike) return undefined;
+  return readPath(documentLike, path) ?? readPath(documentLike._source, path);
+}
+
+function readFlag(documentLike, key) {
+  return (
+    documentLike?.getFlag?.(MODULE_ID, key) ??
+    documentLike?.flags?.[MODULE_ID]?.[key] ??
+    documentLike?._source?.flags?.[MODULE_ID]?.[key] ??
+    null
+  );
+}
+
+function readPath(object, path) {
+  if (!object) return undefined;
+  return String(path)
+    .split('.')
+    .reduce((value, part) => value?.[part], object);
 }
 
 function getImageSource(source) {
