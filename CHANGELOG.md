@@ -19,6 +19,13 @@
 - Reworked the tag picker into a distinct `Filters` panel with grouped tag facets.
 - Selecting a source, tag, excluded tag, or favorites filter with an empty search now browses matching art automatically.
 - Search, sources, tags, favorites, and revert controls now live in the left sidebar so token results keep more space in the picker.
+- Removed the redundant reset-tags icon button. The visible `Clear tags` button remains when tags are active.
+
+### Fixed
+
+- Fixed tag category chips being clipped inside the `Filters` panel.
+- Fixed search results not scrolling inside the picker window.
+- Fixed the picker background changing color while scrolling through long result lists.
 
 ## 1.0.0 - 2026-05-05
 
