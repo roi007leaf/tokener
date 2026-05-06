@@ -26,6 +26,7 @@
 - Fixed tag category chips being clipped inside the `Filters` panel.
 - Fixed search results not scrolling inside the picker window.
 - Fixed the picker background changing color while scrolling through long result lists.
+- Fixed right-click preview tags being spaced too far apart on wide screens.
 
 ## 1.0.0 - 2026-05-05
 

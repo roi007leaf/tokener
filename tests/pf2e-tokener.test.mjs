@@ -2529,11 +2529,19 @@ test('image preview CSS is fullscreen and side by side', () => {
   const overlayRule = css.match(/\.pf2e-tokener-preview\s*\{[^}]+\}/)?.[0] ?? '';
   const panesRule = css.match(/\.pf2e-tokener-preview-panes\s*\{[^}]+\}/)?.[0] ?? '';
   const hiddenPaneRule = css.match(/\.pf2e-tokener-preview-pane\.is-hidden\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagsRule = css.match(/\.pf2e-tokener-preview-tags\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagRowRule = css.match(/\.pf2e-tokener-preview-tag-row\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagValuesRule =
+    css.match(/\.pf2e-tokener-preview-tag-values\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.match(overlayRule, /position:\s*fixed;/);
   assert.match(overlayRule, /inset:\s*0;/);
   assert.match(panesRule, /grid-template-columns:\s*repeat\(auto-fit, minmax\(320px, 1fr\)\);/);
   assert.match(hiddenPaneRule, /display:\s*none;/);
+  assert.match(tagsRule, /justify-self:\s*center;/);
+  assert.match(tagsRule, /width:\s*min\(640px,\s*100%\);/);
+  assert.match(tagRowRule, /grid-template-columns:\s*90px minmax\(0,\s*1fr\);/);
+  assert.match(tagValuesRule, /justify-content:\s*start;/);
   assert.match(
     preview,
     /image\.addEventListener\('error', \(\) => pane\.classList\.add\('is-hidden'\)\)/,

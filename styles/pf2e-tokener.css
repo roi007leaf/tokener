@@ -1340,17 +1340,21 @@
 
 .pf2e-tokener-preview-tags {
   display: grid;
+  justify-self: center;
   gap: 6px;
+  width: min(640px, 100%);
   max-height: 170px;
   overflow-y: auto;
-  padding-top: 4px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.26);
   border-top: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
 }
 
 .pf2e-tokener-preview-tag-row {
   display: grid;
-  grid-template-columns: minmax(120px, 0.25fr) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
   min-height: 28px;
 }
@@ -1365,7 +1369,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  justify-content: end;
+  justify-content: start;
 }
 
 .pf2e-tokener-preview-tag-chip {
