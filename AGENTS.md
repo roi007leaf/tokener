@@ -1,21 +1,16 @@
 <claude-mem-context>
 # Memory Context
 
-# [pf2e-tokener] recent context, 2026-05-07 12:23pm GMT+3
+# [pf2e-tokener] recent context, 2026-05-07 1:55pm GMT+3
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (17,900t read) | 230,727t work | 92% savings
+Stats: 50 obs (18,096t read) | 291,973t work | 94% savings
 
 ### May 7, 2026
-1327 11:32a 🟣 Full Test Suite Passes After Personalized Tags Feature (96/96)
-1328 11:33a 🔵 pf2e-tokener Actions Module Architecture: Token/Actor Apply & Revert System
-1334 11:35a 🔵 Custom Folder Candidate Data Flow: Per-Image Tags Merge Pattern
-1336 11:36a 🟣 TDD: Failing Test Written for Separate tokenPath/portraitPath/subjectPath in Custom Folder Sources
-1338 " 🔵 RED Test Confirms: getObjectFolderEntry Does Not Recognize tokenPath Key
-1339 " 🟣 Separate Folder Paths Implemented in candidates.js
+1339 11:36a 🟣 Separate Folder Paths Implemented in candidates.js
 1340 " 🟣 Separate Folder Paths: custom-folders.js Updated to Parse, Store, and Serialize portraitPath/subjectPath
 1341 " 🟣 Separate Folder Paths: Template Context and i18n Placeholders Added to Custom Folders Settings
 1342 " 🟣 Separate Folder Paths: Settings UI Template Updated with Collapsible Advanced Art Folders Section
@@ -61,6 +56,11 @@ S248 Change custom folders dialog to v2 and add option to add tags to it (May 7 
 1452 12:19p 🔄 Removed `customImageTagsEditable` from candidates.js and extended `preserveScroll` to tag filter interactions
 1453 12:20p 🟣 Feature committed to git: "Add global GM image tag overrides for all token art sources"
 1454 " ✅ pf2e-tokener bumped to version 1.0.5 with CHANGELOG restructured
+1467 12:24p 🟣 Scroll preservation extended to also capture and restore `.pf2e-tokener-tag-groups` sidebar scroll
+1484 1:52p 🔵 pf2e-tokener Results/Token Part Re-renders on Apply — Investigation Started
+1485 1:53p 🔵 Root Cause Found: applyCandidateAction Unconditionally Re-renders Main Part After Apply
+1486 " 🔴 Token Art Apply No Longer Resets Results Panel Scroll Position
+1487 " 🔴 pf2e-tokener Fix Verified: 100/100 Tests Pass, Lint Clean
 
-Access 231k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 292k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

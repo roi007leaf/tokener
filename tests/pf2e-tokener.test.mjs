@@ -1844,6 +1844,12 @@ test('tag changes preserve picker scroll during refresh', () => {
   assert.match(picker, /toggleIncludedTag[\s\S]*renderMainPart\(app, \{ preserveScroll: true \}\)/);
 });
 
+test('applying token art preserves picker result scroll during refresh', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+
+  assert.match(picker, /applyCandidateAction[\s\S]*renderMainPart\(activePicker, \{ preserveScroll: true \}\)/);
+});
+
 test('favorite candidate helper toggles ids and filters candidates', async () => {
   let stored = { ids: ['dragon'] };
   const settings = {

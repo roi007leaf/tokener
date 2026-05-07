@@ -1251,7 +1251,7 @@ async function applyCandidateAction(action, candidate, tokenDocument, card) {
     );
   } finally {
     card?.classList.remove('is-applying');
-    renderMainPart(activePicker);
+    renderMainPart(activePicker, { preserveScroll: true });
   }
 }
 
