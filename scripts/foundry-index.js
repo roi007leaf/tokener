@@ -14,6 +14,7 @@ import {
   searchCandidates,
 } from './candidates.js';
 import { getCustomFolderSources } from './custom-folders.js';
+import { applyImageTagOverrides } from './image-tags.js';
 import { isObject, normalizePath } from './utils.js';
 
 const DATASHEET_BROWSE_ROOTS = [
@@ -33,7 +34,7 @@ export const state = {
 export async function rebuildIndex() {
   state.indexing = buildFoundryIndex()
     .then((index) => {
-      state.index = dedupeCandidates(index);
+      state.index = applyImageTagOverrides(dedupeCandidates(index));
       return state.index;
     })
     .catch((error) => {

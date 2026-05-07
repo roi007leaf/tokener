@@ -1311,6 +1311,13 @@
   background: rgba(52, 111, 141, 0.95);
 }
 
+.pf2e-tokener-custom-image-tags-chip:disabled {
+  cursor: default;
+  color: var(--color-text-light-6, #cfc6b8);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
 .pf2e-tokener-custom-image-tags-empty {
   color: var(--color-text-light-6, #cfc6b8);
   font-size: 12px;
@@ -1363,6 +1370,10 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
+}
+
+.pf2e-tokener-custom-image-tags-options label:has(input:disabled) {
+  color: var(--color-text-light-6, #cfc6b8);
 }
 
 .pf2e-tokener-custom-image-tags-options span {

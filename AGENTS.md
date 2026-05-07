@@ -1,47 +1,16 @@
 <claude-mem-context>
 # Memory Context
 
-# [pf2e-tokener] recent context, 2026-05-07 11:43am GMT+3
+# [pf2e-tokener] recent context, 2026-05-07 12:23pm GMT+3
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision 🚨security_alert 🔐security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (16,959t read) | 349,525t work | 95% savings
+Stats: 50 obs (17,900t read) | 230,727t work | 92% savings
 
 ### May 7, 2026
-1254 8:46a 🔵 Test #20 Already Asserts Recursive Browse for Custom Folders
-1255 8:47a 🟣 TDD Red Test: Folder Structure Tags for Custom Folders
-1256 " 🟣 TDD Red Phase Confirmed: Folder Structure Test Failing
-1257 " 🔵 Exact Failure: candidate.tags is undefined for Subfolder Files
-1258 " 🟣 Implemented Folder Structure Tag Extraction in candidates.js
-1260 8:48a 🟣 Green Phase: Folder Structure Tags Feature Complete
-1261 " ✅ Prettier Reformatted candidates.js After Folder Structure Implementation
-1262 " 🟣 Folder Structure Tags Feature Fully Verified: 96/96 Tests Pass, Lint Clean
-1269 8:51a 🟣 New Feature Request: GM Image Browser for Custom Folders
-1270 " 🔵 Custom Folders Dialog Architecture Mapped for GM Image Browser Feature
-1272 " 🟣 TDD Red: GM Image Browser Assertions Added to Existing Template Test
-1274 " 🟣 GM Custom Folder Image Browser Implemented in custom-folders.js
-1273 8:52a 🟣 Template Gets data-folder-browser Attribute on Folder Picker Button
-1275 8:53a 🟣 Image Browser TDD Green Phase + i18n Keys Added
-1276 " 🔵 CSS Patch Failed: Stale Anchor for .pf2e-tokener-custom-folder-add
-1277 " 🔵 CSS Patch Anchor Mismatch Diagnosed: .pf2e-tokener-custom-folder-add Has Different Properties
-1278 " 🟣 Folder Browser CSS Successfully Written to pf2e-tokener.css
-1279 " ✅ Prettier Pass After GM Image Browser Implementation
-1280 8:54a ⚖️ Version bump to 1.0.3 planned for new features
-1281 8:59a 🔵 Version 1.0.2 exists in three files before bump to 1.0.3
-1282 " ✅ Version bumped to 1.0.3 across all version files
-1287 " ⚖️ Version bump strategy revised: 1.0.3 as fresh entry, 1.0.2 untouched
-1288 9:05a ✅ Version bump to 1.0.3 re-applied, same patch structure as previous attempt
-1289 9:06a ✅ CHANGELOG 1.0.2 section expanded with custom folder feature content
-1320 11:28a 🔵 Feature Inquiry: Personalized Tags
-1321 11:31a 🔵 Project Identified: pf2e-tokener FoundryVTT Module
-1322 " 🔵 pf2e-tokener Already Has Custom Image Tags System
-1323 " 🟣 TDD: Failing Tests Written for Inline Custom Tag Creation
-1324 11:32a 🟣 Personalized Tags: Inline Tag Creation Implemented in picker-app.js
-1325 " 🟣 Personalized Tags: i18n Strings and CSS Added
-1326 " 🟣 Personalized Tags Feature Shipped: Tests Green, Changelog Updated
-1327 " 🟣 Full Test Suite Passes After Personalized Tags Feature (96/96)
+1327 11:32a 🟣 Full Test Suite Passes After Personalized Tags Feature (96/96)
 1328 11:33a 🔵 pf2e-tokener Actions Module Architecture: Token/Actor Apply & Revert System
 1334 11:35a 🔵 Custom Folder Candidate Data Flow: Per-Image Tags Merge Pattern
 1336 11:36a 🟣 TDD: Failing Test Written for Separate tokenPath/portraitPath/subjectPath in Custom Folder Sources
@@ -60,6 +29,38 @@ Stats: 50 obs (16,959t read) | 349,525t work | 95% savings
 1360 " 🟣 pf2e-tokener v1.0.3 Release: Advanced Custom Folder Paths Shipped
 1361 11:43a 🔵 Split-Path Candidate Resolution: Token Ring Integration and Scoring Logic
 1362 " 🔵 Test 44 Failure: portraitPath Lost When subjectPath Omitted from Custom Folder Source
+1363 " 🔴 candidates.js: portraitPath Now Doubles as subjectPath for Dynamic Token Ring When subjectPath Is Absent
+1364 11:44a 🔵 Full Diff Scope: Split-Path Functions Are Net-New in This Session + Custom Tag Creation UI Added
+1366 " ⚖️ Two-Folder Dynamic Token Fix Extracted into v1.0.4 Release
+1368 " ✅ pf2e-tokener Bumped to v1.0.4 Across All Version Files
+1383 11:55a 🟣 GM Custom Tag Support Extended to All Sources
+S248 Change custom folders dialog to v2 and add option to add tags to it (May 7 at 12:08 PM)
+1416 12:08p 🔵 pf2e-tokener picker and custom image tags dialog already use ApplicationV2/DialogV2
+1417 " 🔵 pf2e-tokener has dual CSS targeting for both Token HUD and ApplicationV2 picker contexts
+1418 12:09p 🟣 Added scroll position capture and restore to picker partial re-renders
+1419 " 🟣 Scroll preservation wired into picker listener activation and custom image tags save path
+1420 " 🟣 Test added for scroll preservation after custom image tags save
+1421 " 🔵 Custom folders management dialog is a separate feature from the per-image tag editor
+1422 12:10p 🟣 All 98 tests pass after scroll preservation and custom image tags changes
+1423 " 🔵 Custom folders settings dialog already uses ApplicationV2 wrapper delegating to DialogV2
+1424 " 🔵 CHANGELOG reveals custom folders DialogV2 and source-level tags were added in v1.0.3 (same day)
+1425 " 🟣 New `scripts/image-tags.js` module created for global GM image tag overrides stored in world settings
+1427 12:11p 🟣 Image tag overrides wired into the Foundry index build pipeline as a post-deduplication step
+1428 " 🔴 foundry-index.js patch failed on first attempt due to import order mismatch
+1431 " 🟣 Picker app migrated to global image tag overrides with read-only original tag protection in the edit dialog
+1434 12:12p 🔵 picker-app.js migration patch failed — file still in old state; chip template format mismatch and duplicate name attribute found
+1436 " 🟣 picker-app.js migration to global image tag overrides completed via incremental patches
+1438 " ✅ Template, i18n, and CHANGELOG updated to reflect global image tag overrides feature
+1441 " 🔵 Stale references to old `customImageTagsEditable`/`setCustomFolderImageTags` remain in candidates.js and tests
+1442 12:13p ✅ Updated image tags dialog hint text to clarify GM overlay vs read-only source tags
+1446 " 🔵 Remaining cleanup needed: candidates.js still sets `customImageTagsEditable`; test still calls `setCustomFolderImageTags`
+1447 " 🟣 CSS added for disabled original tag chips and dimmed labels in image tag edit dialog
+1448 12:14p 🔴 Hidden tag input for original tags now rendered with `disabled` attribute
+1450 " 🔵 Prettier cannot format picker.hbs due to Handlebars block inside HTML attribute
+1451 " 🟣 All 99 tests pass — GM image tag overrides feature complete and verified
+1452 12:19p 🔄 Removed `customImageTagsEditable` from candidates.js and extended `preserveScroll` to tag filter interactions
+1453 12:20p 🟣 Feature committed to git: "Add global GM image tag overrides for all token art sources"
+1454 " ✅ pf2e-tokener bumped to version 1.0.5 with CHANGELOG restructured
 
-Access 350k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 231k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>

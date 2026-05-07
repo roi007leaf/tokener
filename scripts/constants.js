@@ -1,6 +1,7 @@
 export const MODULE_ID = 'pf2e-tokener';
 export const DEFAULT_LIMIT = 120;
 export const CUSTOM_FOLDERS_SETTING_KEY = 'customFolders';
+export const IMAGE_TAGS_SETTING_KEY = 'imageTags';
 export const TOKEN_FOLDER_ROOTS = ['resources/tokens', 'assets/tokens', 'tokens'];
 export const PORTRAIT_FOLDER_ROOTS = [
   'resources/art',

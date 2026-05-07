@@ -38,6 +38,8 @@ import {
   getFavoriteIds,
   getCustomFolderSettingsApplicationClass,
   getCustomFolderSources,
+  applyImageTagOverrides,
+  setImageTagOverrides,
   setCustomFolderImageTags,
   getCandidatesForTokenDocument,
   getPickerCandidatePool,
@@ -1758,14 +1760,53 @@ test('custom folder image tags are saved per image and merged with folder tags',
     creature: ['merchant'],
     tag: ['portrait'],
   });
-  assert.equal(candidate.customImageTagsEditable, true);
   assert.deepEqual(searchCandidates([candidate], 'creature:merchant')[0].tags, candidate.tags);
 });
 
-test('picker template renders edit tags only for custom folder image cards', () => {
+test('GM image tag overrides apply to any source without replacing original tags', async () => {
+  let stored = {};
+  const settings = {
+    get: () => stored,
+    set: async (_moduleId, key, value) => {
+      assert.equal(key, 'imageTags');
+      stored = value;
+      return value;
+    },
+  };
+  const [nativeCandidate] = createMappedCandidates({
+    module: MODULE,
+    mapping: {
+      actors: {
+        'Compendium.pf2e.pathfinder-bestiary.Actor.Adult Blue Dragon': {
+          img: 'modules/pf2e-tokens-bestiaries/portraits/dragon.webp',
+          token: {
+            img: 'modules/pf2e-tokens-bestiaries/tokens/dragon.webp',
+          },
+        },
+      },
+    },
+    sourceType: 'native',
+  });
+
+  await setImageTagOverrides(
+    'modules/pf2e-tokens-bestiaries/tokens/dragon.webp',
+    { custom: ['boss'] },
+    settings,
+  );
+  const [tagged] = applyImageTagOverrides([nativeCandidate], settings);
+
+  assert.equal(tagged.imageTagsEditable, true);
+  assert.equal(tagged.imageTagPath, 'modules/pf2e-tokens-bestiaries/tokens/dragon.webp');
+  assert.deepEqual(tagged.originalTags, nativeCandidate.tags);
+  assert.deepEqual(tagged.imageTagOverrides, { custom: ['boss'] });
+  assert.deepEqual(tagged.tags, { custom: ['boss'] });
+  assert.equal(searchCandidates([tagged], 'custom:boss')[0].id, tagged.id);
+});
+
+test('picker template renders edit tags for all indexed image cards', () => {
   const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
 
-  assert.match(template, /{{#if customImageTagsEditable}}/);
+  assert.match(template, /{{#if imageTagsEditable}}/);
   assert.match(template, /data-custom-image-tags-candidate-id=['"]{{viewId}}['"]/);
 });
 
@@ -1779,11 +1820,28 @@ test('custom image tag dialog shows selected tags and supports chip removal', ()
   assert.match(picker, /addCustomImageTag/);
   assert.match(picker, /renderCustomImageHiddenTagInputs/);
   assert.match(picker, /data-custom-image-tag-remove/);
+  assert.match(picker, /candidate\.originalTags/);
+  assert.match(picker, /getEditableCheckedImageTagIds/);
+  assert.match(picker, /disabled/);
   assert.match(picker, /updateCustomImageSelectedTags/);
-  assert.match(picker, /new Set\(tagsToIds\(candidate\.tags\)\)/);
+  assert.match(picker, /new Set\(tagsToIds\(candidate\.imageTagOverrides\)\)/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-selected\s*\{/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-create\s*\{/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-chip\s*\{/);
+  assert.match(css, /\.pf2e-tokener-custom-image-tags-chip:disabled\s*\{/);
+});
+
+test('tag changes preserve picker scroll during refresh', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+
+  assert.match(picker, /function capturePickerScroll/);
+  assert.match(picker, /function restorePickerScroll/);
+  assert.match(picker, /\.pf2e-tokener-tag-groups/);
+  assert.match(picker, /tagGroupsTop/);
+  assert.match(picker, /restorePickerScroll\(app, root\)/);
+  assert.match(picker, /renderMainPart\(app, \{ preserveScroll: true \}\)/);
+  assert.match(picker, /toggleExcludedTag[\s\S]*renderMainPart\(app, \{ preserveScroll: true \}\)/);
+  assert.match(picker, /toggleIncludedTag[\s\S]*renderMainPart\(app, \{ preserveScroll: true \}\)/);
 });
 
 test('favorite candidate helper toggles ids and filters candidates', async () => {

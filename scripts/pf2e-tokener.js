@@ -3,6 +3,7 @@ import { registerCustomFolderSettings } from './custom-folders.js';
 import { registerFavoriteSettings } from './favorites.js';
 import { installApi, rebuildIndex, state } from './foundry-index.js';
 import { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
+import { registerImageTagSettings } from './image-tags.js';
 
 export { MODULE_ID } from './constants.js';
 export {
@@ -43,6 +44,12 @@ export {
   registerCustomFolderSettings,
   setCustomFolderImageTags,
 } from './custom-folders.js';
+export {
+  applyImageTagOverrides,
+  getImageTagOverrides,
+  registerImageTagSettings,
+  setImageTagOverrides,
+} from './image-tags.js';
 export { ensureIndex, rebuildIndex, state } from './foundry-index.js';
 export { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 export {
@@ -86,6 +93,7 @@ function registerFoundryIntegration() {
   hooks.once('init', () => {
     registerFavoriteSettings();
     registerCustomFolderSettings();
+    registerImageTagSettings();
   });
 
   hooks.once('ready', async () => {

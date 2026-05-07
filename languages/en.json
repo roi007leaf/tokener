@@ -21,7 +21,7 @@
   "PF2ETokener.HUD.RemoveFavorite": "Remove favorite",
   "PF2ETokener.HUD.EditCustomImageTags": "Edit image tags",
   "PF2ETokener.HUD.SaveImageTags": "Save tags",
-  "PF2ETokener.HUD.CustomImageTagsHint": "Choose tags to add to this custom folder image.",
+  "PF2ETokener.HUD.CustomImageTagsHint": "Choose GM tags to add to this image. Original source tags are read-only.",
   "PF2ETokener.HUD.SelectedImageTags": "Selected tags",
   "PF2ETokener.HUD.NoSelectedImageTags": "No image tags selected.",
   "PF2ETokener.HUD.CustomTagGroupPlaceholder": "Custom group",
@@ -74,5 +74,7 @@
   "PF2ETokener.Settings.CustomFolders.BrowserNoFolders": "No subfolders found.",
   "PF2ETokener.Settings.CustomFolders.BrowserImages": "Images ({count})",
   "PF2ETokener.Settings.CustomFolders.BrowserImagesLimited": "Images ({shown} / {total})",
-  "PF2ETokener.Settings.CustomFolders.BrowserNoImages": "No images found in this folder tree."
+  "PF2ETokener.Settings.CustomFolders.BrowserNoImages": "No images found in this folder tree.",
+  "PF2ETokener.Settings.ImageTags.Name": "Image tag overrides",
+  "PF2ETokener.Settings.ImageTags.Hint": "GM-added image tags keyed by image path. Original source tags remain read-only."
 }

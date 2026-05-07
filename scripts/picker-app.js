@@ -20,7 +20,7 @@ import {
   toggleFavoriteCandidate,
 } from './favorites.js';
 import { ensureIndex } from './foundry-index.js';
-import { setCustomFolderImageTags } from './custom-folders.js';
+import { setImageTagOverrides } from './image-tags.js';
 import { openImagePreview } from './preview.js';
 import {
   filterCandidatesBySources,
@@ -277,6 +277,7 @@ function activatePickerListeners(app, html) {
   }
 
   restorePickerFocus(app, root);
+  restorePickerScroll(app, root);
 }
 
 function isPickerRootBound(root) {
@@ -422,7 +423,7 @@ async function handlePickerClick(app, event) {
     app.selectedExcludedTagIds.clear();
     app.tagFilterQuery = '';
     resetResultLimit(app);
-    renderMainPart(app);
+    renderMainPart(app, { preserveScroll: true });
     return;
   }
 
@@ -433,7 +434,7 @@ async function handlePickerClick(app, event) {
     if (!tag) return;
     toggleExcludedTag(app, tag.id);
     resetResultLimit(app);
-    renderMainPart(app);
+    renderMainPart(app, { preserveScroll: true });
     return;
   }
 
@@ -444,7 +445,7 @@ async function handlePickerClick(app, event) {
     if (!tag) return;
     toggleIncludedTag(app, tag.id);
     resetResultLimit(app);
-    renderMainPart(app);
+    renderMainPart(app, { preserveScroll: true });
     return;
   }
 
@@ -556,6 +557,45 @@ function restorePickerFocus(app, root) {
   }
 }
 
+function capturePickerScroll(app) {
+  const root =
+    normalizeHudElement(app?.parts?.main) ??
+    normalizeHudElement(app?.element) ??
+    normalizeHudElement(app);
+  const content = root?.querySelector?.('.pf2e-tokener-content');
+  const tagGroups = root?.querySelector?.('.pf2e-tokener-tag-groups');
+  if (!content && !tagGroups) return null;
+  return {
+    contentLeft: content?.scrollLeft ?? 0,
+    contentTop: content?.scrollTop ?? 0,
+    tagGroupsLeft: tagGroups?.scrollLeft ?? 0,
+    tagGroupsTop: tagGroups?.scrollTop ?? 0,
+  };
+}
+
+function restorePickerScroll(app, root) {
+  const scroll = app?._restoreScroll;
+  if (!scroll) return;
+  app._restoreScroll = null;
+
+  const content = root?.querySelector?.('.pf2e-tokener-content');
+  const tagGroups = root?.querySelector?.('.pf2e-tokener-tag-groups');
+  if (!content && !tagGroups) return;
+
+  const applyScroll = () => {
+    if (content) {
+      content.scrollLeft = scroll.contentLeft ?? 0;
+      content.scrollTop = scroll.contentTop ?? 0;
+    }
+    if (tagGroups) {
+      tagGroups.scrollLeft = scroll.tagGroupsLeft ?? 0;
+      tagGroups.scrollTop = scroll.tagGroupsTop ?? 0;
+    }
+  };
+  applyScroll();
+  (globalThis.requestAnimationFrame ?? globalThis.setTimeout)?.(applyScroll, 0);
+}
+
 function matchesTarget(target, selector) {
   return Boolean(target?.matches?.(selector));
 }
@@ -564,8 +604,9 @@ function closestTarget(target, selector) {
   return target?.closest?.(selector) ?? (matchesTarget(target, selector) ? target : null);
 }
 
-function renderMainPart(app) {
-  app?.render?.({ parts: ['main'] });
+function renderMainPart(app, { preserveScroll = false } = {}) {
+  if (preserveScroll) app._restoreScroll = capturePickerScroll(app);
+  return app?.render?.({ parts: ['main'] });
 }
 
 function resetResultLimit(app) {
@@ -820,14 +861,14 @@ function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
     hasPreview: hasPreview,
     previewSrc: previewSrc,
     cardTooltip: getCandidateCardTooltip(candidate),
-    customImageTagsTooltip: localize('HUD.EditCustomImageTags', 'Edit image tags'),
+    imageTagsTooltip: localize('HUD.EditCustomImageTags', 'Edit image tags'),
     tabIndex: isUnavailable ? '-1' : '0',
     viewId,
   };
 }
 
 async function openCustomImageTagsDialog(app, candidate) {
-  if (!candidate?.customImageTagsEditable || !candidate.customImagePath) return;
+  if (!candidate?.imageTagsEditable || !candidate.imageTagPath) return;
   const DialogV2 = resolveDialogV2Class();
   if (!DialogV2?.input) return;
 
@@ -847,10 +888,10 @@ async function openCustomImageTagsDialog(app, candidate) {
       label: localize('HUD.SaveImageTags', 'Save tags'),
       icon: 'fas fa-save',
       callback: async (_event, button) => {
-        const tags = tagIdsToTags(getCheckedImageTagIds(button.form));
-        await setCustomFolderImageTags(candidate.customImagePath, tags);
+        const tags = tagIdsToTags(getEditableCheckedImageTagIds(button.form));
+        await setImageTagOverrides(candidate.imageTagPath, tags);
         await globalThis.game?.modules?.get?.(MODULE_ID)?.api?.rebuildIndex?.();
-        renderMainPart(app);
+        renderMainPart(app, { preserveScroll: true });
         return tags;
       },
     },
@@ -896,14 +937,20 @@ function resolveDialogV2Class() {
 }
 
 function renderCustomImageTagsContent(candidate, tagOptions) {
-  const selected = new Set(tagsToIds(candidate.tags));
+  const originalIds = new Set(tagsToIds(candidate.originalTags));
+  const selected = new Set(tagsToIds(candidate.imageTagOverrides));
   const preparedOptions = tagOptions.map((option) => ({
     ...option,
     groupLabel: normalizeLabel(option.group),
+    original: originalIds.has(option.id),
     selected: selected.has(option.id),
   }));
   const groups = groupTagOptions(preparedOptions);
-  const selectedOptions = getSelectedCustomImageTagOptions(candidate.tags, preparedOptions);
+  const selectedOptions = getSelectedCustomImageTagOptions(
+    candidate.tags,
+    preparedOptions,
+    originalIds,
+  );
 
   return `<div class="pf2e-tokener-custom-image-tags">
     <p class="notes">${escapeHtml(
@@ -951,7 +998,8 @@ function renderCustomImageTagsContent(candidate, tagOptions) {
                       value="${escapeHtml(option.id)}"
                       data-group="${escapeHtml(option.group)}"
                       data-label="${escapeHtml(option.label)}"
-                      ${option.selected ? 'checked' : ''}
+                      ${option.original || option.selected ? 'checked' : ''}
+                      ${option.original ? 'disabled' : ''}
                     >
                     <span>${escapeHtml(option.label)}</span>
                   </label>`,
@@ -974,6 +1022,7 @@ function updateCustomImageSelectedTags(root) {
       id: input.value,
       label: input.dataset.label || input.value,
       group: input.dataset.group || '',
+      original: input.disabled,
     }),
   );
   target.innerHTML = renderCustomImageSelectedTags(selectedOptions);
@@ -1005,17 +1054,18 @@ function addCustomImageTag(root) {
   updateCustomImageSelectedTags(root);
 }
 
-function getSelectedCustomImageTagOptions(tags, indexedOptions) {
+function getSelectedCustomImageTagOptions(tags, indexedOptions, originalIds = new Set()) {
   const indexedById = new Map(indexedOptions.map((option) => [option.id, option]));
   return tagsToIds(tags).map((id) => {
     const indexed = indexedById.get(id);
-    if (indexed) return indexed;
+    if (indexed) return { ...indexed, original: originalIds.has(id) };
     const [group, ...rest] = id.split(':');
     const value = rest.join(':');
     return {
       group,
       id,
       label: normalizeLabel(value),
+      original: originalIds.has(id),
     };
   });
 }
@@ -1036,6 +1086,7 @@ function renderCustomImageHiddenTagInput(option) {
     data-group="${escapeHtml(option.group)}"
     data-label="${escapeHtml(option.label)}"
     checked
+    ${option.original ? 'disabled' : ''}
     hidden
   >`;
 }
@@ -1052,20 +1103,22 @@ function renderCustomImageSelectedTags(options) {
       (option) => `<button
         class="pf2e-tokener-custom-image-tags-chip"
         type="button"
-        data-custom-image-tag-remove="${escapeHtml(option.id)}"
+        ${option.original ? 'disabled' : `data-custom-image-tag-remove="${escapeHtml(option.id)}"`}
         data-tooltip="${escapeHtml(option.group)}: ${escapeHtml(option.label)}"
         data-tooltip-direction="UP"
       >
         <span>${escapeHtml(option.label)}</span>
-        <i class="fas fa-times" aria-hidden="true"></i>
+        ${option.original ? '' : '<i class="fas fa-times" aria-hidden="true"></i>'}
       </button>`,
     )
     .join('');
 }
 
-function getCheckedImageTagIds(form) {
+function getEditableCheckedImageTagIds(form) {
   if (!form || typeof FormData === 'undefined') return [];
-  return new FormData(form).getAll('imageTagIds');
+  return [...(form.querySelectorAll?.('[name="imageTagIds"]:checked') ?? [])]
+    .filter((field) => !field.disabled)
+    .map((field) => field.value);
 }
 
 function tagIdsToTags(tagIds) {

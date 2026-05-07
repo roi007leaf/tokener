@@ -1,7 +1,7 @@
 {
   "id": "pf2e-tokener",
   "title": "PF2e Tokener",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "compatibility": {
     "minimum": "13",
     "verified": "14",

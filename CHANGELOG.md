@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.5 - 2026-05-07
+
+### New
+
+- Added GM image tag overrides for all token art sources while keeping original source tags read-only.
+
+### Fixed
+
+- Preserved the picker result scroll position after saving image tags and changing tag filters.
+
 ## 1.0.4 - 2026-05-07
 
 ### New
