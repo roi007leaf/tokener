@@ -171,10 +171,20 @@ async function collectFolderModuleCandidates(module) {
 async function collectCustomFolderCandidates() {
   const candidates = [];
   for (const source of getCustomFolderSources()) {
-    const files = await browseFilesCompat(source.path, { recursive: true });
+    const files = [];
+    for (const path of getCustomFolderBrowsePaths(source)) {
+      files.push(...(await browseFilesCompat(path, { recursive: true })));
+    }
     candidates.push(...createCustomFolderCandidates({ source, files }));
   }
   return candidates;
+}
+
+function getCustomFolderBrowsePaths(source) {
+  return [source?.path, source?.portraitPath, source?.subjectPath]
+    .map(normalizePath)
+    .filter(Boolean)
+    .filter((path, index, paths) => paths.indexOf(path) === index);
 }
 
 function getFoundryModules() {

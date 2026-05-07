@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 - 2026-05-07
+
+### New
+
+- Added two-folder dynamic token support so custom folder artwork can also supply the dynamic token subject image.
+
 ## 1.0.3 - 2026-05-07
 
 ### New
@@ -8,6 +14,8 @@
 - Added source-level tag assignment for custom folders using the indexed tag categories from the token picker.
 - Added custom folder structure support with searchable `folder:*` tags from nested custom art folders.
 - Added a custom folder browser that previews image thumbnails while choosing custom folder sources.
+- Added custom GM-defined image tag groups and values for custom folder art.
+- Added advanced custom folder paths for separate token, portrait/artwork, and dynamic token subject folders.
 
 ### Improved
 

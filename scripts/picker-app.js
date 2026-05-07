@@ -868,6 +868,13 @@ function activateCustomImageTagsDialog(dialog) {
   });
 
   root.addEventListener?.('click', (event) => {
+    const addButton = closestTarget(event.target, '[data-custom-image-tag-action="add"]');
+    if (addButton) {
+      event.preventDefault?.();
+      addCustomImageTag(root);
+      return;
+    }
+
     const chip = closestTarget(event.target, '[data-custom-image-tag-remove]');
     if (!chip) return;
 
@@ -896,7 +903,7 @@ function renderCustomImageTagsContent(candidate, tagOptions) {
     selected: selected.has(option.id),
   }));
   const groups = groupTagOptions(preparedOptions);
-  const selectedOptions = preparedOptions.filter((option) => option.selected);
+  const selectedOptions = getSelectedCustomImageTagOptions(candidate.tags, preparedOptions);
 
   return `<div class="pf2e-tokener-custom-image-tags">
     <p class="notes">${escapeHtml(
@@ -909,6 +916,25 @@ function renderCustomImageTagsContent(candidate, tagOptions) {
       <div class="pf2e-tokener-custom-image-tags-chips" data-custom-image-tags-selected>
         ${renderCustomImageSelectedTags(selectedOptions)}
       </div>
+    </div>
+    <div class="pf2e-tokener-custom-image-tags-create">
+      <input
+        type="text"
+        data-custom-image-tag-group
+        placeholder="${escapeHtml(localize('HUD.CustomTagGroupPlaceholder', 'Custom group'))}"
+      >
+      <input
+        type="text"
+        data-custom-image-tag-value
+        placeholder="${escapeHtml(localize('HUD.CustomTagValuePlaceholder', 'Custom value'))}"
+      >
+      <button type="button" data-custom-image-tag-action="add">
+        <i class="fas fa-plus" aria-hidden="true"></i>
+        ${escapeHtml(localize('HUD.AddCustomTag', 'Add tag'))}
+      </button>
+    </div>
+    <div data-custom-image-tags-hidden>
+      ${renderCustomImageHiddenTagInputs(selectedOptions, preparedOptions)}
     </div>
     <div class="pf2e-tokener-custom-image-tags-groups">
       ${groups
@@ -951,6 +977,67 @@ function updateCustomImageSelectedTags(root) {
     }),
   );
   target.innerHTML = renderCustomImageSelectedTags(selectedOptions);
+}
+
+function addCustomImageTag(root) {
+  const groupInput = root.querySelector?.('[data-custom-image-tag-group]');
+  const valueInput = root.querySelector?.('[data-custom-image-tag-value]');
+  const group = normalizeSearchText(groupInput?.value);
+  const value = normalizeSearchText(valueInput?.value);
+  if (!group || !value) return;
+
+  const id = `${group}:${value}`;
+  if (!root.querySelector?.(`[name="imageTagIds"][value="${cssEscape(id)}"]`)) {
+    const hidden = root.querySelector?.('[data-custom-image-tags-hidden]');
+    hidden?.insertAdjacentHTML?.(
+      'beforeend',
+      renderCustomImageHiddenTagInput({
+        group,
+        id,
+        label: normalizeLabel(value),
+      }),
+    );
+  }
+
+  const input = root.querySelector?.(`[name="imageTagIds"][value="${cssEscape(id)}"]`);
+  if (input) input.checked = true;
+  if (valueInput) valueInput.value = '';
+  updateCustomImageSelectedTags(root);
+}
+
+function getSelectedCustomImageTagOptions(tags, indexedOptions) {
+  const indexedById = new Map(indexedOptions.map((option) => [option.id, option]));
+  return tagsToIds(tags).map((id) => {
+    const indexed = indexedById.get(id);
+    if (indexed) return indexed;
+    const [group, ...rest] = id.split(':');
+    const value = rest.join(':');
+    return {
+      group,
+      id,
+      label: normalizeLabel(value),
+    };
+  });
+}
+
+function renderCustomImageHiddenTagInputs(selectedOptions, visibleOptions) {
+  const visibleIds = new Set(visibleOptions.map((option) => option.id));
+  return selectedOptions
+    .filter((option) => !visibleIds.has(option.id))
+    .map(renderCustomImageHiddenTagInput)
+    .join('');
+}
+
+function renderCustomImageHiddenTagInput(option) {
+  return `<input
+    type="checkbox"
+    name="imageTagIds"
+    value="${escapeHtml(option.id)}"
+    data-group="${escapeHtml(option.group)}"
+    data-label="${escapeHtml(option.label)}"
+    checked
+    hidden
+  >`;
 }
 
 function renderCustomImageSelectedTags(options) {

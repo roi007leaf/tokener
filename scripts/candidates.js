@@ -92,8 +92,14 @@ export function createFolderCandidates({ module, files }) {
 export function createCustomFolderCandidates({ source, files }) {
   if (!source?.id || !Array.isArray(files)) return [];
   const images = files.map(normalizePath).filter((file) => IMAGE_EXTENSIONS.test(file));
-  const tokenFiles = images.filter(isTokenFolderPath);
-  const art = buildFolderArtLookups(images);
+  const splitPaths = getCustomFolderSplitPaths(source);
+  const splitTokenFiles = splitPaths.hasSplitPaths
+    ? images.filter((file) => isFileInFolderPath(file, splitPaths.tokenPath))
+    : [];
+  const tokenFiles = splitTokenFiles.length ? splitTokenFiles : images.filter(isTokenFolderPath);
+  const art = splitPaths.hasSplitPaths
+    ? buildCustomFolderArtLookups(images, splitPaths)
+    : buildFolderArtLookups(images);
   const module = {
     id: source.id,
     title: source.title || source.path || 'Custom Folder',
@@ -117,6 +123,52 @@ export function createCustomFolderCandidates({ source, files }) {
       ),
       tokenSrc: file,
     }),
+  );
+}
+
+function getCustomFolderSplitPaths(source) {
+  const tokenPath = normalizePath(source?.tokenPath || source?.path);
+  const portraitPath = normalizePath(
+    source?.portraitPath || source?.artworkPath || source?.artPath,
+  );
+  const subjectPath = normalizePath(source?.subjectPath || source?.dynamicTokenPath);
+  return {
+    hasSplitPaths: Boolean(portraitPath || subjectPath),
+    portraitPath,
+    subjectPath,
+    tokenPath,
+  };
+}
+
+function buildCustomFolderArtLookups(files, paths) {
+  const portraits = new Map();
+  const subjects = new Map();
+  for (const file of files.map(normalizePath)) {
+    if (!IMAGE_EXTENSIONS.test(file)) continue;
+    const stem = assetStem(file);
+    if (!stem) continue;
+    if (paths.portraitPath && isFileInFolderPath(file, paths.portraitPath) && !portraits.has(stem))
+      portraits.set(stem, file);
+    if (paths.subjectPath && isFileInFolderPath(file, paths.subjectPath) && !subjects.has(stem))
+      subjects.set(stem, file);
+    if (
+      !paths.subjectPath &&
+      paths.portraitPath &&
+      isFileInFolderPath(file, paths.portraitPath) &&
+      !subjects.has(stem)
+    )
+      subjects.set(stem, file);
+  }
+  return { portraits, subjects };
+}
+
+function isFileInFolderPath(file, folderPath) {
+  const normalizedFile = normalizePath(file);
+  const normalizedFolder = normalizePath(folderPath).replace(/\/+$/, '');
+  return Boolean(
+    normalizedFile &&
+    normalizedFolder &&
+    (normalizedFile === normalizedFolder || normalizedFile.startsWith(`${normalizedFolder}/`)),
   );
 }
 

@@ -40,6 +40,50 @@
           </button>
         </div>
 
+        <details class='pf2e-tokener-custom-folder-advanced'>
+          <summary>{{advancedLabel}}</summary>
+          <div class='pf2e-tokener-custom-folder-path'>
+            <input
+              type='text'
+              name='folders.{{index}}.portraitPath'
+              value='{{portraitPath}}'
+              placeholder='{{portraitPathPlaceholder}}'
+            />
+            <button
+              class='file-picker'
+              type='button'
+              data-folder-browser
+              data-type='folder'
+              data-target='folders.{{index}}.portraitPath'
+              data-tooltip='{{browseLabel}}'
+              data-tooltip-direction='UP'
+            >
+              <i class='fas fa-folder-open' aria-hidden='true'></i>
+            </button>
+            <span></span>
+          </div>
+          <div class='pf2e-tokener-custom-folder-path'>
+            <input
+              type='text'
+              name='folders.{{index}}.subjectPath'
+              value='{{subjectPath}}'
+              placeholder='{{subjectPathPlaceholder}}'
+            />
+            <button
+              class='file-picker'
+              type='button'
+              data-folder-browser
+              data-type='folder'
+              data-target='folders.{{index}}.subjectPath'
+              data-tooltip='{{browseLabel}}'
+              data-tooltip-direction='UP'
+            >
+              <i class='fas fa-folder-open' aria-hidden='true'></i>
+            </button>
+            <span></span>
+          </div>
+        </details>
+
         <section class='pf2e-tokener-custom-folder-tags'>
           <div class='pf2e-tokener-custom-folder-tags-title'>{{tagsLabel}}</div>
           {{#if tagGroups.length}}

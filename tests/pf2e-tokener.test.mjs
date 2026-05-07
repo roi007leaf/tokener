@@ -1663,6 +1663,56 @@ test('custom folder structures pair related art and add searchable folder tags',
   assert.equal(searchCandidates([candidate], 'folder:merchants')[0].id, candidate.id);
 });
 
+test('custom folders can use separate token, portrait, and dynamic subject paths', () => {
+  const settings = {
+    get: () =>
+      JSON.stringify([
+        {
+          title: 'Drakkenheim Monsters',
+          tokenPath: 'modules/drakkenheim-monsters/assets/tokens/dynamic',
+          portraitPath: 'modules/drakkenheim-monsters/assets/art/monsters',
+        },
+      ]),
+  };
+
+  const [source] = getCustomFolderSources(settings);
+  const [candidate] = createCustomFolderCandidates({
+    source,
+    files: [
+      'modules/drakkenheim-monsters/assets/tokens/dynamic/haze-hulk.webp',
+      'modules/drakkenheim-monsters/assets/art/monsters/haze-hulk.webp',
+    ],
+  });
+
+  assert.equal(source.path, 'modules/drakkenheim-monsters/assets/tokens/dynamic');
+  assert.equal(source.portraitPath, 'modules/drakkenheim-monsters/assets/art/monsters');
+  assert.equal(
+    candidate.tokenSrc,
+    'modules/drakkenheim-monsters/assets/tokens/dynamic/haze-hulk.webp',
+  );
+  assert.equal(
+    candidate.portraitSrc,
+    'modules/drakkenheim-monsters/assets/art/monsters/haze-hulk.webp',
+  );
+  assert.equal(
+    candidate.subjectSrc,
+    'modules/drakkenheim-monsters/assets/art/monsters/haze-hulk.webp',
+  );
+  assert.deepEqual(buildTokenUpdate(candidate), {
+    'texture.src': 'modules/drakkenheim-monsters/assets/tokens/dynamic/haze-hulk.webp',
+    'texture.scaleX': 1,
+    'texture.scaleY': 1,
+    randomImg: false,
+    'ring.enabled': true,
+    'ring.subject.texture': 'modules/drakkenheim-monsters/assets/art/monsters/haze-hulk.webp',
+    'ring.subject.scale': 1,
+  });
+  assert.equal(
+    buildActorUpdate(candidate).img,
+    'modules/drakkenheim-monsters/assets/art/monsters/haze-hulk.webp',
+  );
+});
+
 test('custom folder image tags are saved per image and merged with folder tags', async () => {
   let stored = JSON.stringify([
     {
@@ -1724,10 +1774,15 @@ test('custom image tag dialog shows selected tags and supports chip removal', ()
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
 
   assert.match(picker, /pf2e-tokener-custom-image-tags-selected/);
+  assert.match(picker, /pf2e-tokener-custom-image-tags-create/);
+  assert.match(picker, /data-custom-image-tag-action="add"/);
+  assert.match(picker, /addCustomImageTag/);
+  assert.match(picker, /renderCustomImageHiddenTagInputs/);
   assert.match(picker, /data-custom-image-tag-remove/);
   assert.match(picker, /updateCustomImageSelectedTags/);
   assert.match(picker, /new Set\(tagsToIds\(candidate\.tags\)\)/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-selected\s*\{/);
+  assert.match(css, /\.pf2e-tokener-custom-image-tags-create\s*\{/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-chip\s*\{/);
 });
 

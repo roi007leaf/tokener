@@ -1316,6 +1316,23 @@
   font-size: 12px;
 }
 
+.pf2e-tokener-custom-image-tags-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.pf2e-tokener-custom-image-tags-create input {
+  width: 100%;
+  min-width: 0;
+}
+
+.pf2e-tokener-custom-image-tags-create button {
+  min-height: 34px;
+  padding-inline: 10px;
+}
+
 .pf2e-tokener-custom-image-tags-groups {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1545,6 +1562,26 @@
   width: 34px;
   min-width: 34px;
   padding: 0;
+}
+
+.pf2e-tokener-custom-folder-advanced {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--color-border-light-tertiary, rgba(255, 255, 255, 0.14));
+  border-radius: 5px;
+}
+
+.pf2e-tokener-custom-folder-advanced summary {
+  cursor: pointer;
+  color: var(--color-text-light-secondary, #d8c8b0);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pf2e-tokener-custom-folder-advanced[open] summary {
+  margin-bottom: 8px;
 }
 
 .pf2e-tokener-custom-folder-tags {

@@ -245,10 +245,21 @@ function prepareCustomFolderContext(folders, tagOptions = []) {
     addLabel: localize('Settings.CustomFolders.Add', 'Add folder'),
     browseLabel: localize('Settings.CustomFolders.Browse', 'Browse'),
     folders: visibleFolders.map((folder, index) => ({
+      advancedLabel: localize('Settings.CustomFolders.AdvancedPaths', 'Advanced art folders'),
       index,
       path: folder.path ?? '',
       pathPlaceholder: localize('Settings.CustomFolders.PathPlaceholder', 'Folder path'),
+      portraitPath: folder.portraitPath ?? '',
+      portraitPathPlaceholder: localize(
+        'Settings.CustomFolders.PortraitPathPlaceholder',
+        'Portrait/artwork folder path',
+      ),
       removeLabel: localize('Settings.CustomFolders.Remove', 'Remove'),
+      subjectPath: folder.subjectPath ?? '',
+      subjectPathPlaceholder: localize(
+        'Settings.CustomFolders.SubjectPathPlaceholder',
+        'Dynamic token subject folder path',
+      ),
       tagGroups: prepareCustomFolderTagGroups(tagOptions, folder.tags, index),
       tagsEmptyLabel: localize('Settings.CustomFolders.TagsEmpty', 'No indexed tags available.'),
       tagsLabel: localize('Settings.CustomFolders.TagsLabel', 'Tags'),
@@ -509,6 +520,8 @@ function sourceToFormFolder(source) {
   return {
     imageTags: source.imageTags,
     path: source.path ?? '',
+    portraitPath: source.portraitPath ?? '',
+    subjectPath: source.subjectPath ?? '',
     tags: source.tags,
     title: source.title ?? '',
   };
@@ -550,11 +563,17 @@ function normalizeCustomFolderSources(value) {
 }
 
 function serializeCustomFolderSources(sources) {
-  if ((sources ?? []).some((source) => source.tags || source.imageTags)) {
+  if (
+    (sources ?? []).some(
+      (source) => source.tags || source.imageTags || source.portraitPath || source.subjectPath,
+    )
+  ) {
     return JSON.stringify(
-      (sources ?? []).map(({ imageTags, path, tags, title }) => ({
+      (sources ?? []).map(({ imageTags, path, portraitPath, subjectPath, tags, title }) => ({
         ...(imageTags ? { imageTags } : {}),
         path,
+        ...(portraitPath ? { portraitPath } : {}),
+        ...(subjectPath ? { subjectPath } : {}),
         ...(tags ? { tags } : {}),
         title,
       })),
@@ -603,6 +622,8 @@ function normalizeCustomFolderEntry(entry) {
   const raw = isObject(entry) ? getObjectFolderEntry(entry) : getTextFolderEntry(entry);
   const path = normalizeFolderPath(raw.path);
   if (!path) return null;
+  const portraitPath = normalizeFolderPath(raw.portraitPath);
+  const subjectPath = normalizeFolderPath(raw.subjectPath);
   const tags = normalizeCustomFolderTags(raw.tags);
   const imageTags = normalizeCustomFolderImageTags(raw.imageTags);
 
@@ -610,6 +631,8 @@ function normalizeCustomFolderEntry(entry) {
     id: `${CUSTOM_FOLDER_SOURCE_PREFIX}${path}`,
     ...(imageTags ? { imageTags } : {}),
     path,
+    ...(portraitPath ? { portraitPath } : {}),
+    ...(subjectPath ? { subjectPath } : {}),
     ...(tags ? { tags } : {}),
     title: normalizeLabel(raw.title) || titleFromPath(path),
   };
@@ -634,7 +657,7 @@ function getSubmittedFolderEntries(data, existingFolders = []) {
   );
 
   for (const [key, value] of Object.entries(data ?? {})) {
-    const match = key.match(/^folders\.(\d+)\.(path|tagIds|tags|title)$/);
+    const match = key.match(/^folders\.(\d+)\.(path|portraitPath|subjectPath|tagIds|tags|title)$/);
     if (!match) continue;
     const row = rows.get(match[1]) ?? {};
     row[match[2]] = value;
@@ -655,6 +678,8 @@ function getSubmittedFolderEntries(data, existingFolders = []) {
       return {
         ...(existing?.imageTags ? { imageTags: existing.imageTags } : {}),
         path,
+        portraitPath: row?.portraitPath,
+        subjectPath: row?.subjectPath,
         tags: row?.tags ?? tagIdsToTags(row?.tagIds),
         title: row?.title,
       };
@@ -664,7 +689,9 @@ function getSubmittedFolderEntries(data, existingFolders = []) {
 function getObjectFolderEntry(entry) {
   return {
     imageTags: entry.imageTags ?? entry.images ?? entry.imageTagOverrides,
-    path: entry.path ?? entry.folder ?? entry.target,
+    path: entry.path ?? entry.tokenPath ?? entry.folder ?? entry.target,
+    portraitPath: entry.portraitPath ?? entry.artworkPath ?? entry.artPath,
+    subjectPath: entry.subjectPath ?? entry.dynamicTokenPath,
     tags: entry.tags ?? entry.tag ?? tagIdsToTags(entry.tagIds),
     title: entry.title ?? entry.label ?? entry.name,
   };
