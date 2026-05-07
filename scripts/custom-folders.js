@@ -1,4 +1,4 @@
-import { CUSTOM_FOLDERS_SETTING_KEY, MODULE_ID } from './constants.js';
+import { CUSTOM_FOLDERS_SETTING_KEY, IMAGE_EXTENSIONS, MODULE_ID } from './constants.js';
 import {
   isObject,
   localize,
@@ -13,6 +13,7 @@ export const CUSTOM_FOLDER_SOURCE_PREFIX = 'custom-folder:';
 export const CUSTOM_FOLDERS_MENU_KEY = 'customFoldersMenu';
 
 const CUSTOM_FOLDERS_TEMPLATE = 'modules/pf2e-tokener/templates/custom-folders.hbs';
+const CUSTOM_FOLDER_BROWSER_IMAGE_LIMIT = 80;
 
 let CustomFolderSettingsApplicationBase = null;
 let CustomFolderSettingsDialogBase = null;
@@ -196,7 +197,7 @@ async function renderCustomFoldersContent(folders, tagOptions = []) {
           <input type="text" name="folders.${folder.index}.title" value="${escapeHtml(folder.title)}" placeholder="${escapeHtml(folder.titlePlaceholder)}">
           <div class="pf2e-tokener-custom-folder-path">
             <input type="text" name="folders.${folder.index}.path" value="${escapeHtml(folder.path)}" placeholder="${escapeHtml(folder.pathPlaceholder)}">
-            <button class="file-picker" type="button" data-type="folder" data-target="folders.${folder.index}.path"><i class="fas fa-folder-open" aria-hidden="true"></i></button>
+            <button class="file-picker" type="button" data-folder-browser data-type="folder" data-target="folders.${folder.index}.path"><i class="fas fa-folder-open" aria-hidden="true"></i></button>
             <button type="button" data-folder-action="remove" data-folder-index="${folder.index}"><i class="fas fa-trash" aria-hidden="true"></i></button>
           </div>
           <div class="pf2e-tokener-custom-folder-tags">
@@ -309,10 +310,10 @@ function activateCustomFolderDialog(dialog, { getFolders, setFolders, renderCont
   root.dataset.pf2eTokenerCustomFoldersBound = 'true';
 
   root.addEventListener('click', async (event) => {
-    const picker = event.target?.closest?.('.file-picker');
+    const picker = event.target?.closest?.('[data-folder-browser]');
     if (picker) {
       event.preventDefault?.();
-      openFolderPicker(root, picker);
+      await openCustomFolderBrowser(root, picker);
       return;
     }
 
@@ -346,22 +347,162 @@ function activateCustomFolderDialog(dialog, { getFolders, setFolders, renderCont
   });
 }
 
-function openFolderPicker(root, button) {
+async function openCustomFolderBrowser(root, button) {
   const input = root.querySelector?.(`[name="${button.dataset.target}"]`);
-  const FilePicker =
+  const DialogV2Class = resolveDialogV2Class();
+  if (!input || !DialogV2Class?.input) return;
+
+  return DialogV2Class.input({
+    window: {
+      icon: 'fas fa-folder-open',
+      title: localize('Settings.CustomFolders.BrowserTitle', 'Custom folder browser'),
+    },
+    position: {
+      width: 760,
+    },
+    content: await renderCustomFolderBrowserContent(input.value),
+    render: (_event, dialog) => activateCustomFolderBrowser(dialog),
+    ok: {
+      label: localize('Settings.CustomFolders.SelectBrowserFolder', 'Select folder'),
+      icon: 'fas fa-check',
+      callback: async (_event, button) => {
+        const selected = getCustomFolderBrowserPath(button.form);
+        input.value = selected;
+        input.dispatchEvent?.(new Event('change', { bubbles: true }));
+        return selected;
+      },
+    },
+  });
+}
+
+function activateCustomFolderBrowser(dialog) {
+  const root = normalizeHudElement(dialog?.element);
+  if (!root || root.dataset.pf2eTokenerFolderBrowserBound) return;
+  root.dataset.pf2eTokenerFolderBrowserBound = 'true';
+
+  root.addEventListener('click', async (event) => {
+    const target = event.target?.closest?.('[data-folder-browser-path]');
+    if (!target) return;
+
+    event.preventDefault?.();
+    const content = root.querySelector?.('.dialog-content');
+    if (content)
+      content.innerHTML = await renderCustomFolderBrowserContent(target.dataset.folderBrowserPath);
+  });
+}
+
+async function renderCustomFolderBrowserContent(path) {
+  const model = await getCustomFolderBrowserModel(path);
+  return `<div class="pf2e-tokener-folder-browser">
+    <div class="pf2e-tokener-folder-browser-bar">
+      <button type="button" data-folder-browser-path="${escapeHtml(model.parentPath)}" ${model.parentPath === model.path ? 'disabled' : ''}>
+        <i class="fas fa-level-up-alt" aria-hidden="true"></i>
+      </button>
+      <input type="text" name="folderBrowserPath" value="${escapeHtml(model.path)}" placeholder="${escapeHtml(localize('Settings.CustomFolders.PathPlaceholder', 'Folder path'))}">
+    </div>
+    <section class="pf2e-tokener-folder-browser-section">
+      <h3>${escapeHtml(localize('Settings.CustomFolders.BrowserFolders', 'Folders'))}</h3>
+      <div class="pf2e-tokener-folder-browser-folders">
+        ${
+          model.dirs.length
+            ? model.dirs
+                .map(
+                  (
+                    dir,
+                  ) => `<button type="button" data-folder-browser-path="${escapeHtml(dir.path)}">
+                    <i class="fas fa-folder" aria-hidden="true"></i>
+                    <span>${escapeHtml(dir.label)}</span>
+                  </button>`,
+                )
+                .join('')
+            : `<p class="notes">${escapeHtml(localize('Settings.CustomFolders.BrowserNoFolders', 'No subfolders found.'))}</p>`
+        }
+      </div>
+    </section>
+    <section class="pf2e-tokener-folder-browser-section">
+      <h3>${escapeHtml(model.imageCountLabel)}</h3>
+      <div class="pf2e-tokener-folder-browser-images">
+        ${
+          model.images.length
+            ? model.images
+                .map(
+                  (image) => `<figure>
+                    <img src="${escapeHtml(image.path)}" loading="lazy" alt="">
+                    <figcaption title="${escapeHtml(image.label)}">${escapeHtml(image.label)}</figcaption>
+                  </figure>`,
+                )
+                .join('')
+            : `<p class="notes">${escapeHtml(localize('Settings.CustomFolders.BrowserNoImages', 'No images found in this folder tree.'))}</p>`
+        }
+      </div>
+    </section>
+  </div>`;
+}
+
+async function getCustomFolderBrowserModel(path) {
+  const normalizedPath = normalizeFolderPath(path);
+  const immediate = await browseCustomFolderFiles(normalizedPath, { recursive: false });
+  const recursive = await browseCustomFolderFiles(normalizedPath, { recursive: true });
+  const dirs = immediate.dirs.map(normalizePath).filter(Boolean).sort(compareFolderPaths);
+  const images = recursive.files
+    .map(normalizePath)
+    .filter((file) => IMAGE_EXTENSIONS.test(file))
+    .sort(compareFolderPaths);
+  const shownImages = images.slice(0, CUSTOM_FOLDER_BROWSER_IMAGE_LIMIT);
+  const imageLabel =
+    images.length > shownImages.length
+      ? localize('Settings.CustomFolders.BrowserImagesLimited', 'Images ({shown} / {total})')
+          .replace('{shown}', String(shownImages.length))
+          .replace('{total}', String(images.length))
+      : localize('Settings.CustomFolders.BrowserImages', 'Images ({count})').replace(
+          '{count}',
+          String(images.length),
+        );
+
+  return {
+    dirs: dirs.map((dir) => ({ label: titleFromPath(dir), path: dir })),
+    imageCountLabel: imageLabel,
+    images: shownImages.map((image) => ({ label: image.split('/').pop() || image, path: image })),
+    parentPath: parentFolderPath(normalizedPath),
+    path: normalizedPath,
+  };
+}
+
+async function browseCustomFolderFiles(path, { recursive }) {
+  const picker = getFilePickerImplementation();
+  if (!picker?.browse) return { dirs: [], files: [] };
+  try {
+    const result = await picker.browse('data', path, { recursive });
+    return {
+      dirs: Array.isArray(result?.dirs) ? result.dirs : [],
+      files: Array.isArray(result?.files) ? result.files : [],
+    };
+  } catch {
+    return { dirs: [], files: [] };
+  }
+}
+
+function getFilePickerImplementation() {
+  return (
     globalThis.foundry?.applications?.apps?.FilePicker?.implementation ??
     globalThis.FilePicker ??
-    null;
-  if (!input || typeof FilePicker !== 'function') return;
+    null
+  );
+}
 
-  new FilePicker({
-    type: button.dataset.type || 'folder',
-    current: input.value,
-    callback: (path) => {
-      input.value = path;
-      input.dispatchEvent?.(new Event('change', { bubbles: true }));
-    },
-  }).render(true);
+function getCustomFolderBrowserPath(form) {
+  if (!form || typeof FormData === 'undefined') return '';
+  return normalizeFolderPath(new FormData(form).get('folderBrowserPath'));
+}
+
+function parentFolderPath(path) {
+  const parts = normalizeFolderPath(path).split('/').filter(Boolean);
+  parts.pop();
+  return parts.join('/');
+}
+
+function compareFolderPaths(a, b) {
+  return String(a).localeCompare(String(b), undefined, { sensitivity: 'base' });
 }
 
 function sourceToFormFolder(source) {

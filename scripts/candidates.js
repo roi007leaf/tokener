@@ -110,7 +110,11 @@ export function createCustomFolderCandidates({ source, files }) {
       portraitSrc: art.portraits.get(assetStem(file)),
       sourceType: 'custom-folder',
       subjectSrc: art.subjects.get(assetStem(file)),
-      tags: mergeCandidateTags(source.tags, source.imageTags?.[file]),
+      tags: mergeCandidateTags(
+        source.tags,
+        getCustomFolderStructureTags(file, source.path),
+        source.imageTags?.[file],
+      ),
       tokenSrc: file,
     }),
   );
@@ -300,6 +304,31 @@ function mergeCandidateTags(...tagSets) {
     }
   }
   return Object.keys(merged).length ? merged : undefined;
+}
+
+function getCustomFolderStructureTags(file, sourcePath) {
+  const relative = getRelativeFolderPath(file, sourcePath);
+  if (!relative) return undefined;
+
+  const folders = relative
+    .split('/')
+    .slice(0, -1)
+    .map(normalizeSearchText)
+    .filter((part) => part && !isStructuralFolderSegment(part));
+  return folders.length ? { folder: [...new Set(folders)] } : undefined;
+}
+
+function getRelativeFolderPath(file, sourcePath) {
+  const normalizedFile = normalizePath(file);
+  const normalizedSourcePath = normalizePath(sourcePath);
+  if (!normalizedFile || !normalizedSourcePath) return normalizedFile;
+  if (normalizedFile === normalizedSourcePath) return '';
+  if (!normalizedFile.startsWith(`${normalizedSourcePath}/`)) return normalizedFile;
+  return normalizedFile.slice(normalizedSourcePath.length + 1);
+}
+
+function isStructuralFolderSegment(segment) {
+  return new Set(['art', 'assets', 'portraits', 'resources', 'subjects', 'tokens']).has(segment);
 }
 
 function makeCandidateId(moduleId, packKey, actorId, tokenSrc) {

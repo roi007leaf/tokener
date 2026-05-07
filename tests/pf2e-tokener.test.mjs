@@ -1358,9 +1358,14 @@ test('custom folder settings template uses Foundry folder file picker buttons', 
     new URL('../templates/custom-folders.hbs', import.meta.url),
     'utf8',
   );
+  const script = fs.readFileSync(new URL('../scripts/custom-folders.js', import.meta.url), 'utf8');
 
   assert.match(template, /data-type=['"]folder['"]/);
   assert.match(template, /data-target=['"]folders\./);
+  assert.match(template, /data-folder-browser/);
+  assert.match(script, /openCustomFolderBrowser/);
+  assert.match(script, /pf2e-tokener-folder-browser-images/);
+  assert.doesNotMatch(script, /new FilePicker/);
   assert.match(template, /data-folder-tag-group/);
   assert.match(template, /data-folder-tag-id/);
   assert.match(template, /name=['"]{{inputName}}['"]/);
@@ -1626,6 +1631,36 @@ test('custom folders accept source tags and apply them to folder candidates', ()
     creature: ['merchant'],
   });
   assert.deepEqual(searchCandidates([candidate], 'category:npc')[0].tags, candidate.tags);
+});
+
+test('custom folder structures pair related art and add searchable folder tags', () => {
+  const [candidate] = createCustomFolderCandidates({
+    source: {
+      id: 'custom-folder:uploads/custom-art',
+      path: 'uploads/custom-art',
+      title: 'Custom Art',
+    },
+    files: [
+      'uploads/custom-art/tokens/npcs/merchants/old_merchant.webp',
+      'uploads/custom-art/portraits/npcs/merchants/old_merchant.webp',
+      'uploads/custom-art/subjects/npcs/merchants/old_merchant.webp',
+      'uploads/custom-art/portraits/npcs/merchants/shopkeeper.webp',
+    ],
+  });
+
+  assert.equal(candidate.tokenSrc, 'uploads/custom-art/tokens/npcs/merchants/old_merchant.webp');
+  assert.equal(
+    candidate.portraitSrc,
+    'uploads/custom-art/portraits/npcs/merchants/old_merchant.webp',
+  );
+  assert.equal(
+    candidate.subjectSrc,
+    'uploads/custom-art/subjects/npcs/merchants/old_merchant.webp',
+  );
+  assert.deepEqual(candidate.tags, {
+    folder: ['npcs', 'merchants'],
+  });
+  assert.equal(searchCandidates([candidate], 'folder:merchants')[0].id, candidate.id);
 });
 
 test('custom folder image tags are saved per image and merged with folder tags', async () => {

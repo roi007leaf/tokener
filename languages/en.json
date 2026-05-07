@@ -61,5 +61,12 @@
   "PF2ETokener.Settings.CustomFolders.PathPlaceholder": "Folder path",
   "PF2ETokener.Settings.CustomFolders.TitlePlaceholder": "Source name",
   "PF2ETokener.Settings.CustomFolders.TagsLabel": "Tags",
-  "PF2ETokener.Settings.CustomFolders.TagsEmpty": "No indexed tags available."
+  "PF2ETokener.Settings.CustomFolders.TagsEmpty": "No indexed tags available.",
+  "PF2ETokener.Settings.CustomFolders.BrowserTitle": "Custom folder browser",
+  "PF2ETokener.Settings.CustomFolders.SelectBrowserFolder": "Select folder",
+  "PF2ETokener.Settings.CustomFolders.BrowserFolders": "Folders",
+  "PF2ETokener.Settings.CustomFolders.BrowserNoFolders": "No subfolders found.",
+  "PF2ETokener.Settings.CustomFolders.BrowserImages": "Images ({count})",
+  "PF2ETokener.Settings.CustomFolders.BrowserImagesLimited": "Images ({shown} / {total})",
+  "PF2ETokener.Settings.CustomFolders.BrowserNoImages": "No images found in this folder tree."
 }
