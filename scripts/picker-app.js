@@ -20,6 +20,7 @@ import {
   toggleFavoriteCandidate,
 } from './favorites.js';
 import { ensureIndex } from './foundry-index.js';
+import { setCustomFolderImageTags } from './custom-folders.js';
 import { openImagePreview } from './preview.js';
 import {
   filterCandidatesBySources,
@@ -27,11 +28,7 @@ import {
   getPanelSourceFilterOptions,
   getSourceFilterLabel,
 } from './sources.js';
-import {
-  getTagFilterOptions,
-  getTagGroupSearchState,
-  isTagOptionSearchMatch,
-} from './tags.js';
+import { getTagFilterOptions, getTagGroupSearchState, isTagOptionSearchMatch } from './tags.js';
 import {
   getDocumentActor,
   localize,
@@ -207,7 +204,8 @@ export function getPickerCandidatePool(
   { favoriteIds = new Set(), sourceOptions = getPanelSourceFilterOptions(index) } = {},
 ) {
   const resultLimit = Math.max(DEFAULT_LIMIT, Number(app?.resultLimit) || DEFAULT_LIMIT);
-  const selectedSourceIds = app?.selectedSourceIds ?? new Set(sourceOptions.map((option) => option.id));
+  const selectedSourceIds =
+    app?.selectedSourceIds ?? new Set(sourceOptions.map((option) => option.id));
   const selectedTagIds = app?.selectedTagIds ?? new Set();
   const excludedTagIds = app?.selectedExcludedTagIds ?? app?.excludedTagIds ?? new Set();
   const query = buildCandidateSearchQuery(app?.searchQuery, selectedTagIds, excludedTagIds);
@@ -338,6 +336,17 @@ async function handlePickerClick(app, event) {
     const candidate = app._candidateMap.get(favoriteButton.dataset.favoriteCandidateId);
     if (candidate) await toggleFavoriteCandidate(candidate);
     renderMainPart(app);
+    return;
+  }
+
+  const customImageTagsButton = closestTarget(target, '[data-custom-image-tags-candidate-id]');
+  if (customImageTagsButton) {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    const candidate = app._candidateMap.get(
+      customImageTagsButton.dataset.customImageTagsCandidateId,
+    );
+    if (candidate) await openCustomImageTagsDialog(app, candidate);
     return;
   }
 
@@ -665,16 +674,14 @@ function prepareTagFilterView(options, app) {
     buttonLabel: activeCount
       ? `${localize('HUD.Tags', 'Tags')} (${activeCount})`
       : localize('HUD.Tags', 'Tags'),
-    className: [
-      options.length ? '' : 'is-empty',
-    ]
-      .filter(Boolean)
-      .join(' '),
+    className: [options.length ? '' : 'is-empty'].filter(Boolean).join(' '),
     clearLabel: localize('HUD.ClearTags', 'Clear tags'),
     filterQuery: app.tagFilterQuery,
     groups: groups.map((group) => {
       const searchState = getTagGroupSearchState(group, tagFilter);
-      const visibleOptions = group.options.filter((option) => isTagOptionSearchMatch(option, tagFilter));
+      const visibleOptions = group.options.filter((option) =>
+        isTagOptionSearchMatch(option, tagFilter),
+      );
       return {
         ...group,
         ...searchState,
@@ -813,9 +820,204 @@ function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
     hasPreview: hasPreview,
     previewSrc: previewSrc,
     cardTooltip: getCandidateCardTooltip(candidate),
+    customImageTagsTooltip: localize('HUD.EditCustomImageTags', 'Edit image tags'),
     tabIndex: isUnavailable ? '-1' : '0',
     viewId,
   };
+}
+
+async function openCustomImageTagsDialog(app, candidate) {
+  if (!candidate?.customImageTagsEditable || !candidate.customImagePath) return;
+  const DialogV2 = resolveDialogV2Class();
+  if (!DialogV2?.input) return;
+
+  const tagOptions = getTagFilterOptions(await ensureIndex());
+  const content = renderCustomImageTagsContent(candidate, tagOptions);
+  await DialogV2.input({
+    window: {
+      icon: 'fas fa-tags',
+      title: localize('HUD.EditCustomImageTags', 'Edit image tags'),
+    },
+    position: {
+      width: 560,
+    },
+    content,
+    render: (_event, dialog) => activateCustomImageTagsDialog(dialog),
+    ok: {
+      label: localize('HUD.SaveImageTags', 'Save tags'),
+      icon: 'fas fa-save',
+      callback: async (_event, button) => {
+        const tags = tagIdsToTags(getCheckedImageTagIds(button.form));
+        await setCustomFolderImageTags(candidate.customImagePath, tags);
+        await globalThis.game?.modules?.get?.(MODULE_ID)?.api?.rebuildIndex?.();
+        renderMainPart(app);
+        return tags;
+      },
+    },
+  });
+}
+
+function activateCustomImageTagsDialog(dialog) {
+  const root = normalizeHudElement(dialog?.element);
+  if (!root || root.dataset.pf2eTokenerCustomImageTagsBound) return;
+  root.dataset.pf2eTokenerCustomImageTagsBound = 'true';
+
+  root.addEventListener?.('change', (event) => {
+    if (!matchesTarget(event.target, '[name="imageTagIds"]')) return;
+    updateCustomImageSelectedTags(root);
+  });
+
+  root.addEventListener?.('click', (event) => {
+    const chip = closestTarget(event.target, '[data-custom-image-tag-remove]');
+    if (!chip) return;
+
+    event.preventDefault?.();
+    const input = root.querySelector?.(
+      `[name="imageTagIds"][value="${cssEscape(chip.dataset.customImageTagRemove)}"]`,
+    );
+    if (input) input.checked = false;
+    updateCustomImageSelectedTags(root);
+  });
+}
+
+function resolveDialogV2Class() {
+  return (
+    globalThis.foundry?.applications?.api?.DialogV2 ??
+    globalThis.foundry?.applications?.DialogV2 ??
+    null
+  );
+}
+
+function renderCustomImageTagsContent(candidate, tagOptions) {
+  const selected = new Set(tagsToIds(candidate.customImageTags));
+  const preparedOptions = tagOptions.map((option) => ({
+    ...option,
+    groupLabel: normalizeLabel(option.group),
+    selected: selected.has(option.id),
+  }));
+  const groups = groupTagOptions(preparedOptions);
+  const selectedOptions = preparedOptions.filter((option) => option.selected);
+
+  return `<div class="pf2e-tokener-custom-image-tags">
+    <p class="notes">${escapeHtml(
+      localize('HUD.CustomImageTagsHint', 'Choose tags to add to this custom folder image.'),
+    )}</p>
+    <div class="pf2e-tokener-custom-image-tags-selected">
+      <div class="pf2e-tokener-custom-image-tags-selected-title">${escapeHtml(
+        localize('HUD.SelectedImageTags', 'Selected tags'),
+      )}</div>
+      <div class="pf2e-tokener-custom-image-tags-chips" data-custom-image-tags-selected>
+        ${renderCustomImageSelectedTags(selectedOptions)}
+      </div>
+    </div>
+    <div class="pf2e-tokener-custom-image-tags-groups">
+      ${groups
+        .map(
+          (group) => `<details class="pf2e-tokener-custom-image-tags-group" open>
+            <summary>${escapeHtml(group.label)}</summary>
+            <div class="pf2e-tokener-custom-image-tags-options">
+              ${group.options
+                .map(
+                  (option) => `<label>
+                    <input
+                      type="checkbox"
+                      name="imageTagIds"
+                      value="${escapeHtml(option.id)}"
+                      data-group="${escapeHtml(option.group)}"
+                      data-label="${escapeHtml(option.label)}"
+                      ${option.selected ? 'checked' : ''}
+                    >
+                    <span>${escapeHtml(option.label)}</span>
+                  </label>`,
+                )
+                .join('')}
+            </div>
+          </details>`,
+        )
+        .join('')}
+    </div>
+  </div>`;
+}
+
+function updateCustomImageSelectedTags(root) {
+  const target = root.querySelector?.('[data-custom-image-tags-selected]');
+  if (!target) return;
+
+  const selectedOptions = [...(root.querySelectorAll?.('[name="imageTagIds"]:checked') ?? [])].map(
+    (input) => ({
+      id: input.value,
+      label: input.dataset.label || input.value,
+      group: input.dataset.group || '',
+    }),
+  );
+  target.innerHTML = renderCustomImageSelectedTags(selectedOptions);
+}
+
+function renderCustomImageSelectedTags(options) {
+  if (!options.length) {
+    return `<span class="pf2e-tokener-custom-image-tags-empty">${escapeHtml(
+      localize('HUD.NoSelectedImageTags', 'No image tags selected.'),
+    )}</span>`;
+  }
+
+  return options
+    .map(
+      (option) => `<button
+        class="pf2e-tokener-custom-image-tags-chip"
+        type="button"
+        data-custom-image-tag-remove="${escapeHtml(option.id)}"
+        data-tooltip="${escapeHtml(option.group)}: ${escapeHtml(option.label)}"
+        data-tooltip-direction="UP"
+      >
+        <span>${escapeHtml(option.label)}</span>
+        <i class="fas fa-times" aria-hidden="true"></i>
+      </button>`,
+    )
+    .join('');
+}
+
+function getCheckedImageTagIds(form) {
+  if (!form || typeof FormData === 'undefined') return [];
+  return new FormData(form).getAll('imageTagIds');
+}
+
+function tagIdsToTags(tagIds) {
+  const ids = Array.isArray(tagIds) ? tagIds : tagIds ? [tagIds] : [];
+  const tags = {};
+  for (const id of ids) {
+    const [group, ...rest] = String(id ?? '').split(':');
+    const value = rest.join(':');
+    if (!group || !value) continue;
+    tags[group] = [...new Set([...(tags[group] ?? []), value])];
+  }
+  return Object.keys(tags).length ? tags : undefined;
+}
+
+function tagsToIds(tags) {
+  if (!tags || typeof tags !== 'object') return [];
+  return Object.entries(tags).flatMap(([group, values]) =>
+    (Array.isArray(values) ? values : [values])
+      .map((value) => normalizeSearchText(value))
+      .filter(Boolean)
+      .map((value) => `${normalizeSearchText(group)}:${value}`),
+  );
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function cssEscape(value) {
+  const escape = globalThis.CSS?.escape;
+  if (typeof escape === 'function') return escape(String(value ?? ''));
+  return String(value ?? '')
+    .replaceAll('\\', '\\\\')
+    .replaceAll('"', '\\"');
 }
 
 function groupTagOptions(options) {

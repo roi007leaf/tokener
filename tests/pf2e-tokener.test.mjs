@@ -28,6 +28,7 @@ import {
   buildCandidateSearchQuery,
   getTokenPickerApplicationClass,
   rebuildIndex,
+  createCustomFolderCandidates,
   createDatasheetCandidates,
   createFolderCandidates,
   createMappedCandidates,
@@ -37,6 +38,7 @@ import {
   getFavoriteIds,
   getCustomFolderSettingsApplicationClass,
   getCustomFolderSources,
+  setCustomFolderImageTags,
   getCandidatesForTokenDocument,
   getPickerCandidatePool,
   localize,
@@ -1314,10 +1316,19 @@ test('custom folder settings register as world paths and normalize source entrie
 });
 
 test('custom folder settings use a folder-picker submenu when Foundry forms are available', () => {
-  const previousFormApplication = globalThis.FormApplication;
+  const previousFoundry = globalThis.foundry;
   const calls = [];
   const menuCalls = [];
-  globalThis.FormApplication = class {};
+  class FakeApplicationV2 {}
+  class FakeDialogV2 {}
+  globalThis.foundry = {
+    applications: {
+      api: {
+        ApplicationV2: FakeApplicationV2,
+        DialogV2: FakeDialogV2,
+      },
+    },
+  };
   const settings = {
     register: (...args) => calls.push(args),
     registerMenu: (...args) => menuCalls.push(args),
@@ -1334,9 +1345,11 @@ test('custom folder settings use a folder-picker submenu when Foundry forms are 
     assert.equal(menuCalls[0][1], 'customFoldersMenu');
     assert.equal(menuCalls[0][2].restricted, true);
     assert.equal(menuCalls[0][2].type, getCustomFolderSettingsApplicationClass());
+    assert.ok(menuCalls[0][2].type.prototype instanceof FakeApplicationV2);
+    assert.match(menuCalls[0][2].type.prototype.openDialog.toString(), /DialogV2Class\.input/);
   } finally {
-    if (previousFormApplication === undefined) delete globalThis.FormApplication;
-    else globalThis.FormApplication = previousFormApplication;
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
   }
 });
 
@@ -1348,8 +1361,338 @@ test('custom folder settings template uses Foundry folder file picker buttons', 
 
   assert.match(template, /data-type=['"]folder['"]/);
   assert.match(template, /data-target=['"]folders\./);
+  assert.match(template, /data-folder-tag-group/);
+  assert.match(template, /data-folder-tag-id/);
+  assert.match(template, /name=['"]{{inputName}}['"]/);
+  assert.doesNotMatch(template, /name=['"]folders\.{{index}}\.tags['"]/);
   assert.match(template, /data-folder-action=['"]add['"]/);
   assert.match(template, /data-folder-action=['"]remove['"]/);
+});
+
+test('custom folder settings dialog renders selectable indexed tag categories', async () => {
+  const previousFoundry = globalThis.foundry;
+  const previousGame = globalThis.game;
+  let dialogConfig;
+  class FakeApplicationV2 {}
+  class FakeDialogV2 {
+    static input(config) {
+      dialogConfig = config;
+      return Promise.resolve(null);
+    }
+  }
+  globalThis.foundry = {
+    applications: {
+      api: {
+        ApplicationV2: FakeApplicationV2,
+        DialogV2: FakeDialogV2,
+      },
+      handlebars: {
+        renderTemplate: async (_template, context) => JSON.stringify(context),
+      },
+    },
+  };
+  globalThis.game = {
+    modules: new Map([
+      [
+        'pf2e-tokener',
+        {
+          api: {
+            ensureIndex: async () => state.index,
+          },
+        },
+      ],
+    ]),
+    settings: {
+      get: (_moduleId, key) =>
+        key === 'customFolders'
+          ? JSON.stringify([
+              {
+                path: 'uploads/npcs',
+                tags: {
+                  category: ['npc'],
+                },
+              },
+            ])
+          : undefined,
+    },
+  };
+  state.index = [
+    {
+      id: 'dragon',
+      label: 'Dragon',
+      tags: {
+        category: ['npc'],
+        creature: ['dragon'],
+      },
+    },
+    {
+      id: 'sword',
+      label: 'Sword',
+      tags: {
+        equipment: ['sword'],
+      },
+    },
+  ];
+
+  try {
+    const CustomFolders = getCustomFolderSettingsApplicationClass(FakeApplicationV2, FakeDialogV2);
+    await new CustomFolders().openDialog();
+    const context = JSON.parse(dialogConfig.content);
+    const [folder] = context.folders;
+
+    assert.deepEqual(
+      folder.tagGroups.map((group) => ({
+        id: group.id,
+        selected: group.selected,
+        options: group.options.map((option) => ({
+          checked: option.checked,
+          id: option.id,
+        })),
+      })),
+      [
+        {
+          id: 'category',
+          selected: true,
+          options: [{ checked: true, id: 'category:npc' }],
+        },
+        {
+          id: 'equipment',
+          selected: false,
+          options: [{ checked: false, id: 'equipment:sword' }],
+        },
+        {
+          id: 'creature',
+          selected: false,
+          options: [{ checked: false, id: 'creature:dragon' }],
+        },
+      ],
+    );
+  } finally {
+    state.index = [];
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+  }
+});
+
+test('custom folder settings preserve per-image tags when saving folder rows', async () => {
+  const previousFoundry = globalThis.foundry;
+  const previousGame = globalThis.game;
+  const previousFormData = globalThis.FormData;
+  let dialogConfig;
+  let stored = JSON.stringify([
+    {
+      path: 'uploads/npcs',
+      title: 'My NPCs',
+      imageTags: {
+        'uploads/npcs/old_merchant.webp': {
+          creature: ['merchant'],
+        },
+      },
+      tags: {
+        category: ['npc'],
+      },
+    },
+  ]);
+  class FakeApplicationV2 {}
+  class FakeDialogV2 {
+    static input(config) {
+      dialogConfig = config;
+      return Promise.resolve(null);
+    }
+  }
+  class FakeFormData {
+    constructor(form) {
+      this.form = form;
+    }
+
+    entries() {
+      return this.form.values[Symbol.iterator]();
+    }
+  }
+  globalThis.FormData = FakeFormData;
+  globalThis.foundry = {
+    applications: {
+      api: {
+        ApplicationV2: FakeApplicationV2,
+        DialogV2: FakeDialogV2,
+      },
+      handlebars: {
+        renderTemplate: async () => '<div></div>',
+      },
+    },
+  };
+  globalThis.game = {
+    modules: new Map([
+      [
+        'pf2e-tokener',
+        {
+          api: {
+            ensureIndex: async () => [],
+          },
+        },
+      ],
+    ]),
+    settings: {
+      get: () => stored,
+      set: async (_moduleId, key, value) => {
+        assert.equal(key, 'customFolders');
+        stored = value;
+        return value;
+      },
+    },
+  };
+
+  try {
+    const CustomFolders = getCustomFolderSettingsApplicationClass(FakeApplicationV2, FakeDialogV2);
+    await new CustomFolders().openDialog();
+    await dialogConfig.ok.callback(null, {
+      form: {
+        values: [
+          ['folders.0.title', 'My Renamed NPCs'],
+          ['folders.0.path', 'uploads/npcs'],
+          ['folders.0.tagIds', 'category:npc'],
+        ],
+      },
+    });
+
+    const [source] = getCustomFolderSources(globalThis.game.settings);
+    assert.equal(source.title, 'My Renamed NPCs');
+    assert.deepEqual(source.imageTags, {
+      'uploads/npcs/old_merchant.webp': {
+        creature: ['merchant'],
+      },
+    });
+  } finally {
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+    if (previousFormData === undefined) delete globalThis.FormData;
+    else globalThis.FormData = previousFormData;
+  }
+});
+
+test('custom folder tag selector CSS uses compact grouped controls', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const template = fs.readFileSync(
+    new URL('../templates/custom-folders.hbs', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(template, /pf2e-tokener-custom-folder-add/);
+  assert.match(template, /pf2e-tokener-custom-folder-tag-summary/);
+  assert.match(template, /pf2e-tokener-custom-folder-tag-label/);
+  assert.match(
+    css,
+    /\.pf2e-tokener-custom-folder-tag-groups\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/,
+  );
+  assert.match(css, /\.pf2e-tokener-custom-folder-tag-group summary::before\s*\{/);
+  assert.match(
+    css,
+    /\.pf2e-tokener-custom-folder-tags input\[type=['"]checkbox['"]\]\s*\{[^}]*width:\s*14px;/,
+  );
+  assert.match(css, /\.pf2e-tokener-custom-folder-add\s*\{[^}]*justify-self:\s*start;/);
+});
+
+test('custom folders accept source tags and apply them to folder candidates', () => {
+  const settings = {
+    get: () =>
+      JSON.stringify([
+        {
+          path: 'uploads/npcs',
+          title: 'My NPCs',
+          tags: {
+            category: ['npc'],
+            creature: 'merchant',
+          },
+        },
+      ]),
+  };
+
+  const [source] = getCustomFolderSources(settings);
+  const [candidate] = createCustomFolderCandidates({
+    source,
+    files: ['uploads/npcs/old_merchant.png'],
+  });
+
+  assert.deepEqual(source.tags, {
+    category: ['npc'],
+    creature: ['merchant'],
+  });
+  assert.deepEqual(candidate.tags, {
+    category: ['npc'],
+    creature: ['merchant'],
+  });
+  assert.deepEqual(searchCandidates([candidate], 'category:npc')[0].tags, candidate.tags);
+});
+
+test('custom folder image tags are saved per image and merged with folder tags', async () => {
+  let stored = JSON.stringify([
+    {
+      path: 'uploads/npcs',
+      title: 'My NPCs',
+      tags: {
+        category: ['npc'],
+      },
+    },
+  ]);
+  const settings = {
+    get: () => stored,
+    set: async (_moduleId, key, value) => {
+      assert.equal(key, 'customFolders');
+      stored = value;
+      return value;
+    },
+  };
+
+  await setCustomFolderImageTags(
+    'uploads/npcs/old_merchant.webp',
+    {
+      creature: ['merchant'],
+      tag: ['portrait'],
+    },
+    settings,
+  );
+
+  const [source] = getCustomFolderSources(settings);
+  const [candidate] = createCustomFolderCandidates({
+    source,
+    files: ['uploads/npcs/old_merchant.webp'],
+  });
+
+  assert.deepEqual(source.imageTags, {
+    'uploads/npcs/old_merchant.webp': {
+      creature: ['merchant'],
+      tag: ['portrait'],
+    },
+  });
+  assert.deepEqual(candidate.tags, {
+    category: ['npc'],
+    creature: ['merchant'],
+    tag: ['portrait'],
+  });
+  assert.equal(candidate.customImageTagsEditable, true);
+  assert.deepEqual(searchCandidates([candidate], 'creature:merchant')[0].tags, candidate.tags);
+});
+
+test('picker template renders edit tags only for custom folder image cards', () => {
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+
+  assert.match(template, /{{#if customImageTagsEditable}}/);
+  assert.match(template, /data-custom-image-tags-candidate-id=['"]{{viewId}}['"]/);
+});
+
+test('custom image tag dialog shows selected tags and supports chip removal', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+
+  assert.match(picker, /pf2e-tokener-custom-image-tags-selected/);
+  assert.match(picker, /data-custom-image-tag-remove/);
+  assert.match(picker, /updateCustomImageSelectedTags/);
+  assert.match(css, /\.pf2e-tokener-custom-image-tags-selected\s*\{/);
+  assert.match(css, /\.pf2e-tokener-custom-image-tags-chip\s*\{/);
 });
 
 test('favorite candidate helper toggles ids and filters candidates', async () => {

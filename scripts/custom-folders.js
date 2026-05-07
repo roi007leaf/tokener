@@ -1,5 +1,13 @@
 import { CUSTOM_FOLDERS_SETTING_KEY, MODULE_ID } from './constants.js';
-import { isObject, localize, normalizeHudElement, normalizeLabel, normalizePath } from './utils.js';
+import {
+  isObject,
+  localize,
+  normalizeHudElement,
+  normalizeLabel,
+  normalizePath,
+  normalizeSearchText,
+} from './utils.js';
+import { getTagFilterOptions } from './tags.js';
 
 export const CUSTOM_FOLDER_SOURCE_PREFIX = 'custom-folder:';
 export const CUSTOM_FOLDERS_MENU_KEY = 'customFoldersMenu';
@@ -7,6 +15,7 @@ export const CUSTOM_FOLDERS_MENU_KEY = 'customFoldersMenu';
 const CUSTOM_FOLDERS_TEMPLATE = 'modules/pf2e-tokener/templates/custom-folders.hbs';
 
 let CustomFolderSettingsApplicationBase = null;
+let CustomFolderSettingsDialogBase = null;
 let CustomFolderSettingsApplicationClass = null;
 
 export function registerCustomFolderSettings(settings = globalThis.game?.settings) {
@@ -47,106 +56,334 @@ export function getCustomFolderSources(settings = globalThis.game?.settings) {
   return normalizeCustomFolderSources(readCustomFolderSetting(settings));
 }
 
-export function getCustomFolderSettingsApplicationClass(
-  FormApplicationClass = globalThis.FormApplication,
+export async function setCustomFolderImageTags(
+  imagePath,
+  tags,
+  settings = globalThis.game?.settings,
 ) {
-  if (!FormApplicationClass) return null;
+  const normalizedImagePath = normalizePath(imagePath);
+  if (!normalizedImagePath || !settings?.set) return null;
+
+  const normalizedTags = normalizeCustomFolderTags(tags);
+  const sources = getCustomFolderSources(settings);
+  let changed = false;
+  const updated = sources.map((source) => {
+    if (!isImageInCustomFolderSource(normalizedImagePath, source)) return source;
+    changed = true;
+    const imageTags = { ...(source.imageTags ?? {}) };
+    if (normalizedTags) imageTags[normalizedImagePath] = normalizedTags;
+    else delete imageTags[normalizedImagePath];
+    return {
+      ...source,
+      ...(Object.keys(imageTags).length ? { imageTags } : {}),
+    };
+  });
+
+  if (!changed) return null;
+  const serialized = serializeCustomFolderSources(updated);
+  await settings.set(MODULE_ID, CUSTOM_FOLDERS_SETTING_KEY, serialized);
+  return updated;
+}
+
+export function getCustomFolderSettingsApplicationClass(
+  ApplicationV2Class = resolveApplicationV2Class(),
+  DialogV2Class = resolveDialogV2Class(),
+) {
+  if (!ApplicationV2Class || !DialogV2Class) return null;
   if (
     CustomFolderSettingsApplicationClass &&
-    CustomFolderSettingsApplicationBase === FormApplicationClass
+    CustomFolderSettingsApplicationBase === ApplicationV2Class &&
+    CustomFolderSettingsDialogBase === DialogV2Class
   )
     return CustomFolderSettingsApplicationClass;
 
-  CustomFolderSettingsApplicationClass = class Pf2eTokenerCustomFolders extends (
-    FormApplicationClass
-  ) {
-    static get defaultOptions() {
-      const baseOptions = super.defaultOptions ?? {};
-      const merge = globalThis.foundry?.utils?.mergeObject;
-      const options = {
-        id: 'pf2e-tokener-custom-folders',
-        classes: ['pf2e-tokener-custom-folders-app'],
-        template: CUSTOM_FOLDERS_TEMPLATE,
+  CustomFolderSettingsApplicationClass = class Pf2eTokenerCustomFolders extends ApplicationV2Class {
+    static DEFAULT_OPTIONS = {
+      id: 'pf2e-tokener-custom-folders',
+      classes: ['pf2e-tokener-custom-folders-app'],
+      tag: 'section',
+      window: {
+        icon: 'fas fa-folder-open',
         title: localize('Settings.CustomFolders.MenuName', 'Custom token folders'),
-        width: 640,
+      },
+    };
+
+    render(_options) {
+      void this.openDialog();
+      return this;
+    }
+
+    async openDialog() {
+      let folders = getCustomFolderSources().map(sourceToFormFolder);
+      if (!folders.length) folders = [createEmptyFolderRow()];
+      const tagOptions = await getCustomFolderTagOptions();
+
+      const renderContent = async () => renderCustomFoldersContent(folders, tagOptions);
+      const activate = (dialog) => {
+        activateCustomFolderDialog(dialog, {
+          getFolders: () => folders,
+          setFolders: (nextFolders) => {
+            folders = nextFolders.length ? nextFolders : [createEmptyFolderRow()];
+          },
+          renderContent,
+        });
       };
-      return typeof merge === 'function'
-        ? merge(baseOptions, options)
-        : { ...baseOptions, ...options };
+
+      return DialogV2Class.input({
+        window: {
+          icon: 'fas fa-folder-open',
+          title: this.title,
+        },
+        position: {
+          width: 720,
+        },
+        content: await renderContent(),
+        render: (_event, dialog) => activate(dialog),
+        ok: {
+          label: localize('Settings.CustomFolders.Save', 'Save changes'),
+          icon: 'fas fa-save',
+          callback: async (_event, button) => {
+            const submitted = normalizeCustomFolderSources(
+              getFormFolderEntries(button.form, folders),
+            );
+            await globalThis.game?.settings?.set?.(
+              MODULE_ID,
+              CUSTOM_FOLDERS_SETTING_KEY,
+              serializeCustomFolderSources(submitted),
+            );
+            return submitted;
+          },
+        },
+      });
     }
 
     get title() {
       return localize('Settings.CustomFolders.MenuName', 'Custom token folders');
     }
-
-    getData(options) {
-      const context = super.getData?.(options) ?? {};
-      const folders =
-        this._folders ??
-        (getCustomFolderSources().map(({ path, title }) => ({ path, title })) || []);
-      const visibleFolders = folders.length ? folders : [{ path: '', title: '' }];
-      return {
-        ...context,
-        addLabel: localize('Settings.CustomFolders.Add', 'Add folder'),
-        browseLabel: localize('Settings.CustomFolders.Browse', 'Browse'),
-        folders: visibleFolders.map((folder, index) => ({
-          index,
-          path: folder.path ?? '',
-          pathPlaceholder: localize('Settings.CustomFolders.PathPlaceholder', 'Folder path'),
-          removeLabel: localize('Settings.CustomFolders.Remove', 'Remove'),
-          title: folder.title ?? '',
-          titlePlaceholder: localize('Settings.CustomFolders.TitlePlaceholder', 'Source name'),
-        })),
-        hasFolders: visibleFolders.length > 0,
-        hint: localize(
-          'Settings.CustomFolders.MenuHint',
-          'Choose custom token art folders and name each source.',
-        ),
-        saveLabel: localize('Settings.CustomFolders.Save', 'Save changes'),
-      };
-    }
-
-    activateListeners(html) {
-      super.activateListeners?.(html);
-      const root = normalizeHudElement(html);
-      root?.addEventListener?.('click', (event) => this.#handleClick(event));
-    }
-
-    _getFilePickerOptions(event) {
-      return {
-        ...(super._getFilePickerOptions?.(event) ?? {}),
-        type: 'folder',
-      };
-    }
-
-    async _updateObject(_event, formData) {
-      const folders = normalizeCustomFolderSources(getSubmittedFolderEntries(formData));
-      await globalThis.game?.settings?.set?.(
-        MODULE_ID,
-        CUSTOM_FOLDERS_SETTING_KEY,
-        serializeCustomFolderSources(folders),
-      );
-      this._folders = null;
-    }
-
-    #handleClick(event) {
-      const action = event.target?.closest?.('[data-folder-action]');
-      if (!action) return;
-
-      event.preventDefault?.();
-      const folders = getFormFolderEntries(this.form);
-      if (action.dataset.folderAction === 'add') {
-        folders.push({ path: '', title: '' });
-      } else if (action.dataset.folderAction === 'remove') {
-        folders.splice(Number(action.dataset.folderIndex), 1);
-      }
-      this._folders = folders;
-      this.render?.();
-    }
   };
 
-  CustomFolderSettingsApplicationBase = FormApplicationClass;
+  CustomFolderSettingsApplicationBase = ApplicationV2Class;
+  CustomFolderSettingsDialogBase = DialogV2Class;
   return CustomFolderSettingsApplicationClass;
+}
+
+function resolveApplicationV2Class() {
+  return (
+    globalThis.foundry?.applications?.api?.ApplicationV2 ??
+    globalThis.foundry?.applications?.ApplicationV2 ??
+    null
+  );
+}
+
+function resolveDialogV2Class() {
+  return (
+    globalThis.foundry?.applications?.api?.DialogV2 ??
+    globalThis.foundry?.applications?.DialogV2 ??
+    null
+  );
+}
+
+async function renderCustomFoldersContent(folders, tagOptions = []) {
+  const context = prepareCustomFolderContext(folders, tagOptions);
+  const renderer =
+    globalThis.foundry?.applications?.handlebars?.renderTemplate ?? globalThis.renderTemplate;
+  if (typeof renderer === 'function') return renderer(CUSTOM_FOLDERS_TEMPLATE, context);
+
+  return `<div class="pf2e-tokener-custom-folders">${context.folders
+    .map(
+      (folder) => `
+        <div class="pf2e-tokener-custom-folder-row" data-folder-index="${folder.index}">
+          <input type="text" name="folders.${folder.index}.title" value="${escapeHtml(folder.title)}" placeholder="${escapeHtml(folder.titlePlaceholder)}">
+          <div class="pf2e-tokener-custom-folder-path">
+            <input type="text" name="folders.${folder.index}.path" value="${escapeHtml(folder.path)}" placeholder="${escapeHtml(folder.pathPlaceholder)}">
+            <button class="file-picker" type="button" data-type="folder" data-target="folders.${folder.index}.path"><i class="fas fa-folder-open" aria-hidden="true"></i></button>
+            <button type="button" data-folder-action="remove" data-folder-index="${folder.index}"><i class="fas fa-trash" aria-hidden="true"></i></button>
+          </div>
+          <div class="pf2e-tokener-custom-folder-tags">
+            <div class="pf2e-tokener-custom-folder-tags-title">${escapeHtml(folder.tagsLabel)}</div>
+            ${renderCustomFolderTagGroupsFallback(folder)}
+          </div>
+        </div>`,
+    )
+    .join('')}
+    <button type="button" data-folder-action="add"><i class="fas fa-plus" aria-hidden="true"></i>${escapeHtml(context.addLabel)}</button>
+  </div>`;
+}
+
+function renderCustomFolderTagGroupsFallback(folder) {
+  if (!folder.tagGroups.length) return `<p class="notes">${escapeHtml(folder.tagsEmptyLabel)}</p>`;
+  return folder.tagGroups
+    .map(
+      (group) => `
+        <details class="pf2e-tokener-custom-folder-tag-group">
+          <summary>
+            <label>
+              <input type="checkbox" data-folder-tag-group="${escapeHtml(group.id)}" ${group.selected ? 'checked' : ''}>
+              <span>${escapeHtml(group.label)}</span>
+            </label>
+          </summary>
+          <div class="pf2e-tokener-custom-folder-tag-options">
+            ${group.options
+              .map(
+                (option) => `
+                  <label class="pf2e-tokener-custom-folder-tag-option">
+                    <input type="checkbox" name="folders.${folder.index}.tagIds" value="${escapeHtml(option.id)}" data-folder-tag-id="${escapeHtml(option.id)}" data-folder-tag-group-id="${escapeHtml(option.group)}" ${option.checked ? 'checked' : ''}>
+                    <span>${escapeHtml(option.label)}</span>
+                  </label>`,
+              )
+              .join('')}
+          </div>
+        </details>`,
+    )
+    .join('');
+}
+
+function prepareCustomFolderContext(folders, tagOptions = []) {
+  const visibleFolders = folders.length ? folders : [createEmptyFolderRow()];
+  return {
+    addLabel: localize('Settings.CustomFolders.Add', 'Add folder'),
+    browseLabel: localize('Settings.CustomFolders.Browse', 'Browse'),
+    folders: visibleFolders.map((folder, index) => ({
+      index,
+      path: folder.path ?? '',
+      pathPlaceholder: localize('Settings.CustomFolders.PathPlaceholder', 'Folder path'),
+      removeLabel: localize('Settings.CustomFolders.Remove', 'Remove'),
+      tagGroups: prepareCustomFolderTagGroups(tagOptions, folder.tags, index),
+      tagsEmptyLabel: localize('Settings.CustomFolders.TagsEmpty', 'No indexed tags available.'),
+      tagsLabel: localize('Settings.CustomFolders.TagsLabel', 'Tags'),
+      title: folder.title ?? '',
+      titlePlaceholder: localize('Settings.CustomFolders.TitlePlaceholder', 'Source name'),
+    })),
+    hasFolders: visibleFolders.length > 0,
+    hint: localize(
+      'Settings.CustomFolders.MenuHint',
+      'Choose custom token art folders and name each source.',
+    ),
+  };
+}
+
+async function getCustomFolderTagOptions() {
+  const api = globalThis.game?.modules?.get?.(MODULE_ID)?.api;
+  const index =
+    (typeof api?.ensureIndex === 'function' ? await api.ensureIndex() : api?.index) ?? [];
+  return getTagFilterOptions(index);
+}
+
+function prepareCustomFolderTagGroups(options, selectedTags, folderIndex) {
+  const selectedIds = new Set(tagsToIds(selectedTags));
+  return groupCustomFolderTagOptions(options).map((group) => {
+    const preparedOptions = group.options.map((option) => ({
+      ...option,
+      checked: selectedIds.has(option.id),
+      checkedAttribute: selectedIds.has(option.id) ? 'checked' : '',
+      inputName: `folders.${folderIndex}.tagIds`,
+    }));
+    const selected =
+      preparedOptions.length > 0 && preparedOptions.every((option) => option.checked);
+    return {
+      ...group,
+      options: preparedOptions,
+      selected,
+      selectedAttribute: selected ? 'checked' : '',
+    };
+  });
+}
+
+function groupCustomFolderTagOptions(options) {
+  const byGroup = new Map();
+  for (const option of options ?? []) {
+    const group = byGroup.get(option.group) ?? {
+      id: option.group,
+      label: normalizeLabel(option.group),
+      options: [],
+    };
+    group.options.push(option);
+    byGroup.set(option.group, group);
+  }
+  return [...byGroup.values()];
+}
+
+function activateCustomFolderDialog(dialog, { getFolders, setFolders, renderContent }) {
+  const root = normalizeHudElement(dialog?.element);
+  if (!root || root.dataset.pf2eTokenerCustomFoldersBound) return;
+  root.dataset.pf2eTokenerCustomFoldersBound = 'true';
+
+  root.addEventListener('click', async (event) => {
+    const picker = event.target?.closest?.('.file-picker');
+    if (picker) {
+      event.preventDefault?.();
+      openFolderPicker(root, picker);
+      return;
+    }
+
+    const action = event.target?.closest?.('[data-folder-action]');
+    if (!action) return;
+
+    event.preventDefault?.();
+    const folders = getFormFolderEntries(root.querySelector?.('form'), getFolders());
+    if (action.dataset.folderAction === 'add') {
+      folders.push(createEmptyFolderRow());
+    } else if (action.dataset.folderAction === 'remove') {
+      folders.splice(Number(action.dataset.folderIndex), 1);
+    }
+
+    setFolders(folders);
+    const content = root.querySelector?.('.dialog-content');
+    if (content) {
+      content.innerHTML = await renderContent();
+    }
+  });
+
+  root.addEventListener('change', (event) => {
+    const group = event.target?.closest?.('[data-folder-tag-group]');
+    if (!group) return;
+
+    const row = group.closest?.('[data-folder-index]');
+    const groupId = group.dataset.folderTagGroup;
+    row?.querySelectorAll?.(`[data-folder-tag-group-id="${groupId}"]`)?.forEach((input) => {
+      input.checked = group.checked;
+    });
+  });
+}
+
+function openFolderPicker(root, button) {
+  const input = root.querySelector?.(`[name="${button.dataset.target}"]`);
+  const FilePicker =
+    globalThis.foundry?.applications?.apps?.FilePicker?.implementation ??
+    globalThis.FilePicker ??
+    null;
+  if (!input || typeof FilePicker !== 'function') return;
+
+  new FilePicker({
+    type: button.dataset.type || 'folder',
+    current: input.value,
+    callback: (path) => {
+      input.value = path;
+      input.dispatchEvent?.(new Event('change', { bubbles: true }));
+    },
+  }).render(true);
+}
+
+function sourceToFormFolder(source) {
+  return {
+    imageTags: source.imageTags,
+    path: source.path ?? '',
+    tags: source.tags,
+    title: source.title ?? '',
+  };
+}
+
+function createEmptyFolderRow() {
+  return { path: '', tags: '', title: '' };
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 function readCustomFolderSetting(settings) {
@@ -172,6 +409,19 @@ function normalizeCustomFolderSources(value) {
 }
 
 function serializeCustomFolderSources(sources) {
+  if ((sources ?? []).some((source) => source.tags || source.imageTags)) {
+    return JSON.stringify(
+      (sources ?? []).map(({ imageTags, path, tags, title }) => ({
+        ...(imageTags ? { imageTags } : {}),
+        path,
+        ...(tags ? { tags } : {}),
+        title,
+      })),
+      null,
+      2,
+    );
+  }
+
   return (sources ?? [])
     .map((source) =>
       source.title && source.title !== titleFromPath(source.path)
@@ -212,25 +462,38 @@ function normalizeCustomFolderEntry(entry) {
   const raw = isObject(entry) ? getObjectFolderEntry(entry) : getTextFolderEntry(entry);
   const path = normalizeFolderPath(raw.path);
   if (!path) return null;
+  const tags = normalizeCustomFolderTags(raw.tags);
+  const imageTags = normalizeCustomFolderImageTags(raw.imageTags);
 
   return {
     id: `${CUSTOM_FOLDER_SOURCE_PREFIX}${path}`,
+    ...(imageTags ? { imageTags } : {}),
     path,
+    ...(tags ? { tags } : {}),
     title: normalizeLabel(raw.title) || titleFromPath(path),
   };
 }
 
-function getFormFolderEntries(form) {
-  if (!form || typeof FormData === 'undefined') return getCustomFolderSources();
-  const data = Object.fromEntries(new FormData(form).entries());
-  return getSubmittedFolderEntries(data);
+function getFormFolderEntries(form, existingFolders = getCustomFolderSources()) {
+  if (!form || typeof FormData === 'undefined') return existingFolders;
+  const data = {};
+  for (const [key, value] of new FormData(form).entries()) {
+    if (Object.hasOwn(data, key)) data[key] = [...[data[key]].flat(), value];
+    else data[key] = value;
+  }
+  return getSubmittedFolderEntries(data, existingFolders);
 }
 
-function getSubmittedFolderEntries(data) {
+function getSubmittedFolderEntries(data, existingFolders = []) {
   const rows = new Map();
+  const existingByPath = new Map(
+    (existingFolders ?? [])
+      .map((folder) => [normalizeFolderPath(folder?.path), folder])
+      .filter(([path]) => path),
+  );
 
   for (const [key, value] of Object.entries(data ?? {})) {
-    const match = key.match(/^folders\.(\d+)\.(path|title)$/);
+    const match = key.match(/^folders\.(\d+)\.(path|tagIds|tags|title)$/);
     if (!match) continue;
     const row = rows.get(match[1]) ?? {};
     row[match[2]] = value;
@@ -245,15 +508,23 @@ function getSubmittedFolderEntries(data) {
 
   return [...rows.entries()]
     .sort(([a], [b]) => Number(a) - Number(b))
-    .map(([, row]) => ({
-      path: row?.path,
-      title: row?.title,
-    }));
+    .map(([, row]) => {
+      const path = row?.path;
+      const existing = existingByPath.get(normalizeFolderPath(path));
+      return {
+        ...(existing?.imageTags ? { imageTags: existing.imageTags } : {}),
+        path,
+        tags: row?.tags ?? tagIdsToTags(row?.tagIds),
+        title: row?.title,
+      };
+    });
 }
 
 function getObjectFolderEntry(entry) {
   return {
+    imageTags: entry.imageTags ?? entry.images ?? entry.imageTagOverrides,
     path: entry.path ?? entry.folder ?? entry.target,
+    tags: entry.tags ?? entry.tag ?? tagIdsToTags(entry.tagIds),
     title: entry.title ?? entry.label ?? entry.name,
   };
 }
@@ -269,12 +540,97 @@ function getTextFolderEntry(entry) {
   };
 }
 
+function normalizeCustomFolderTags(tags) {
+  if (typeof tags === 'string') return tagsTextToObject(tags);
+  if (!isObject(tags)) return undefined;
+
+  const normalized = {};
+  for (const [group, values] of Object.entries(tags)) {
+    addTagValues(normalized, group, Array.isArray(values) ? values : [values]);
+  }
+  return Object.keys(normalized).length ? normalized : undefined;
+}
+
+function normalizeCustomFolderImageTags(imageTags) {
+  if (!isObject(imageTags)) return undefined;
+
+  const normalized = {};
+  for (const [path, tags] of Object.entries(imageTags)) {
+    const imagePath = normalizePath(path);
+    const normalizedTags = normalizeCustomFolderTags(tags);
+    if (imagePath && normalizedTags) normalized[imagePath] = normalizedTags;
+  }
+  return Object.keys(normalized).length ? normalized : undefined;
+}
+
+function tagIdsToTags(tagIds) {
+  const ids = Array.isArray(tagIds) ? tagIds : tagIds ? [tagIds] : [];
+  const normalized = {};
+  for (const id of ids) {
+    const separator = String(id ?? '').indexOf(':');
+    if (separator === -1) continue;
+    addTagValues(normalized, String(id).slice(0, separator), [String(id).slice(separator + 1)]);
+  }
+  return Object.keys(normalized).length ? normalized : undefined;
+}
+
+function tagsTextToObject(text) {
+  const normalized = {};
+  for (const part of String(text ?? '')
+    .split(/[\n;,]+/)
+    .map((value) => value.trim())
+    .filter(Boolean)) {
+    const separator = part.indexOf(':');
+    const group = separator === -1 ? 'tag' : part.slice(0, separator);
+    const value = separator === -1 ? part : part.slice(separator + 1);
+    addTagValues(normalized, group, [value]);
+  }
+  return Object.keys(normalized).length ? normalized : undefined;
+}
+
+function addTagValues(target, group, values) {
+  const groupKey = normalizeSearchText(group);
+  if (!groupKey) return;
+  const list = values.map((value) => normalizeSearchText(value)).filter(Boolean);
+  if (!list.length) return;
+  target[groupKey] = [...new Set([...(target[groupKey] ?? []), ...list])];
+}
+
+function tagsToText(tags) {
+  if (!isObject(tags)) return '';
+  return Object.entries(tags)
+    .flatMap(([group, values]) =>
+      (Array.isArray(values) ? values : [values])
+        .map((value) => normalizeSearchText(value))
+        .filter(Boolean)
+        .map((value) => (group === 'tag' || group === 'tags' ? value : `${group}:${value}`)),
+    )
+    .join(', ');
+}
+
+function tagsToIds(tags) {
+  if (!isObject(tags)) return [];
+  return Object.entries(tags).flatMap(([group, values]) =>
+    (Array.isArray(values) ? values : [values])
+      .map((value) => normalizeSearchText(value))
+      .filter(Boolean)
+      .map((value) => `${normalizeSearchText(group)}:${value}`),
+  );
+}
+
 function normalizeFolderPath(path) {
   return normalizePath(path)
     .replace(/^data:/i, '')
     .replace(/^\/+/, '')
     .replace(/\/+$/, '')
     .trim();
+}
+
+function isImageInCustomFolderSource(imagePath, source) {
+  const sourcePath = normalizePath(source?.path);
+  return Boolean(
+    sourcePath && (imagePath === sourcePath || imagePath.startsWith(`${sourcePath}/`)),
+  );
 }
 
 function titleFromPath(path) {

@@ -101,11 +101,16 @@ export function createCustomFolderCandidates({ source, files }) {
 
   return (tokenFiles.length ? tokenFiles : images).map((file) =>
     makeCandidate({
+      customFolderPath: source.path,
+      customImageTagsEditable: true,
+      customImageTags: source.imageTags?.[file],
+      customImagePath: file,
       label: labelFromPath(file),
       module,
       portraitSrc: art.portraits.get(assetStem(file)),
       sourceType: 'custom-folder',
       subjectSrc: art.subjects.get(assetStem(file)),
+      tags: mergeCandidateTags(source.tags, source.imageTags?.[file]),
       tokenSrc: file,
     }),
   );
@@ -237,6 +242,9 @@ function normalizeMappedToken(info) {
 
 function makeCandidate({
   actorId,
+  customFolderPath,
+  customImageTagsEditable,
+  customImagePath,
   label,
   module,
   packKey,
@@ -257,6 +265,9 @@ function makeCandidate({
   const candidate = {
     actorId,
     canonicalPackKey: normalizedPackKey,
+    customFolderPath,
+    customImageTagsEditable,
+    customImagePath,
     id: makeCandidateId(module?.id, packKey, actorId, artKey),
     label: normalizeLabel(label) || labelFromPath(artKey),
     moduleId: module?.id || 'unknown',
@@ -273,6 +284,22 @@ function makeCandidate({
   };
   candidate.searchText = buildSearchText(candidate);
   return candidate;
+}
+
+function mergeCandidateTags(...tagSets) {
+  const merged = {};
+  for (const tags of tagSets) {
+    if (!isObject(tags)) continue;
+    for (const [group, values] of Object.entries(tags)) {
+      const groupKey = normalizeSearchText(group);
+      if (!groupKey) continue;
+      const list = (Array.isArray(values) ? values : [values])
+        .map((value) => normalizeSearchText(value))
+        .filter(Boolean);
+      if (list.length) merged[groupKey] = [...new Set([...(merged[groupKey] ?? []), ...list])];
+    }
+  }
+  return Object.keys(merged).length ? merged : undefined;
 }
 
 function makeCandidateId(moduleId, packKey, actorId, tokenSrc) {

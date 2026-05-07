@@ -58,6 +58,7 @@ export function installApi() {
     get index() {
       return state.index;
     },
+    ensureIndex,
     rebuildIndex,
     search: (query) => searchCandidates(state.index, query),
     getCandidatesForToken: (tokenDocument, query = '') =>

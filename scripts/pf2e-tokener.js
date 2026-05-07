@@ -41,6 +41,7 @@ export {
   getCustomFolderSettingsApplicationClass,
   getCustomFolderSources,
   registerCustomFolderSettings,
+  setCustomFolderImageTags,
 } from './custom-folders.js';
 export { ensureIndex, rebuildIndex, state } from './foundry-index.js';
 export { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.2 - 2026-05-07
+
+### New
+
+- Added a DialogV2 custom token folder settings menu with folder picker support.
+- Added source-level tag assignment for custom folders using the indexed tag categories from the token picker.
+
+### Improved
+
+- Styled the custom folder tag selector as compact grouped controls.
+- Custom folder tags now apply to every indexed token image from that folder.
+
+### Fixed
+
+- Custom folder settings now preserve structured tagged folder entries while remaining compatible with legacy plain path settings.
+
 ## 1.0.1 - 2026-05-06
 
 ### New
