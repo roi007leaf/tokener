@@ -174,6 +174,17 @@ You can:
 
 This is useful when several modules include similar creatures.
 
+## Custom Folders
+
+Use the `Custom token folders` module setting to add world data folders as extra sources. Click `Configure`, give each folder a source name, then use the folder button to choose the folder with Foundry's file picker.
+
+You can also type paths manually. Enter one or more paths separated by commas, semicolons, or new lines:
+
+- `tokens/npcs`
+- `My NPCs | uploads/npcs`
+
+PF2e Tokener scans those folders recursively. If a folder contains recognizable `tokens`, `art`, or `subjects` subfolders, it uses the token images and links matching actor or subject art by filename. Otherwise, every image in the custom folder is treated as token art.
+
 ## Current Token Marker
 
 If a result already matches the selected token's current image, it is marked as current.

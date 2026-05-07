@@ -1383,6 +1383,37 @@
   line-height: 1;
 }
 
+.pf2e-tokener-custom-folders {
+  display: grid;
+  gap: 12px;
+}
+
+.pf2e-tokener-custom-folder-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pf2e-tokener-custom-folder-row {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--color-border-light-tertiary, rgba(255, 255, 255, 0.18));
+  border-radius: 4px;
+}
+
+.pf2e-tokener-custom-folder-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px 34px;
+  gap: 6px;
+  align-items: center;
+}
+
+.pf2e-tokener-custom-folder-path button {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+}
+
 @media (max-width: 520px) {
   #token-hud .pf2e-tokener-panel {
     left: calc(44px * var(--pf2e-tokener-inverse-zoom, 1));

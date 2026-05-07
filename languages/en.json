@@ -43,5 +43,16 @@
   "PF2ETokener.Notifications.Reverted": "PF2e Tokener: previous art restored.",
   "PF2ETokener.Notifications.RevertFailed": "PF2e Tokener: failed to restore previous art.",
   "PF2ETokener.Settings.Favorites.Name": "Favorite token art",
-  "PF2ETokener.Settings.Favorites.Hint": "Token art marked as favorites in PF2e Tokener."
+  "PF2ETokener.Settings.Favorites.Hint": "Token art marked as favorites in PF2e Tokener.",
+  "PF2ETokener.Settings.CustomFolders.Name": "Custom token folders",
+  "PF2ETokener.Settings.CustomFolders.Hint": "Data paths to scan for token art. Separate entries with commas, semicolons, or new lines. Use \"Label | path\" to name a source.",
+  "PF2ETokener.Settings.CustomFolders.MenuName": "Custom token folders",
+  "PF2ETokener.Settings.CustomFolders.MenuLabel": "Configure",
+  "PF2ETokener.Settings.CustomFolders.MenuHint": "Choose custom token art folders and name each source.",
+  "PF2ETokener.Settings.CustomFolders.Add": "Add folder",
+  "PF2ETokener.Settings.CustomFolders.Browse": "Browse",
+  "PF2ETokener.Settings.CustomFolders.Remove": "Remove",
+  "PF2ETokener.Settings.CustomFolders.Save": "Save changes",
+  "PF2ETokener.Settings.CustomFolders.PathPlaceholder": "Folder path",
+  "PF2ETokener.Settings.CustomFolders.TitlePlaceholder": "Source name"
 }

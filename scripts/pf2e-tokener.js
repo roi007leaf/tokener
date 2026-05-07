@@ -1,4 +1,5 @@
 import { MODULE_ID } from './constants.js';
+import { registerCustomFolderSettings } from './custom-folders.js';
 import { registerFavoriteSettings } from './favorites.js';
 import { installApi, rebuildIndex, state } from './foundry-index.js';
 import { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
@@ -22,6 +23,7 @@ export {
 } from './actions.js';
 export {
   createDatasheetCandidates,
+  createCustomFolderCandidates,
   createFolderCandidates,
   createMappedCandidates,
   dedupeCandidates,
@@ -35,6 +37,11 @@ export {
   registerFavoriteSettings,
   toggleFavoriteCandidate,
 } from './favorites.js';
+export {
+  getCustomFolderSettingsApplicationClass,
+  getCustomFolderSources,
+  registerCustomFolderSettings,
+} from './custom-folders.js';
 export { ensureIndex, rebuildIndex, state } from './foundry-index.js';
 export { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 export {
@@ -77,6 +84,7 @@ function registerFoundryIntegration() {
 
   hooks.once('init', () => {
     registerFavoriteSettings();
+    registerCustomFolderSettings();
   });
 
   hooks.once('ready', async () => {

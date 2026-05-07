@@ -35,10 +35,13 @@ import {
   filterCandidatesBySources,
   filterFavoriteCandidates,
   getFavoriteIds,
+  getCustomFolderSettingsApplicationClass,
+  getCustomFolderSources,
   getCandidatesForTokenDocument,
   getPickerCandidatePool,
   localize,
   normalizeHudElement,
+  registerCustomFolderSettings,
   registerFavoriteSettings,
   renderTokenHud,
   setTextTooltip,
@@ -774,6 +777,92 @@ test('Foundry index discovers datasheets from monster and adventure modules', as
   }
 });
 
+test('Foundry index adds custom folders as source-scoped token art', async () => {
+  const previousGame = globalThis.game;
+  const previousFoundry = globalThis.foundry;
+  state.index = [];
+  state.errors = [];
+  state.indexing = null;
+
+  const browseCalls = [];
+  globalThis.game = {
+    modules: new Map(),
+    settings: {
+      get: (_moduleId, key) =>
+        key === 'customFolders' ? 'world-token-art\nMy NPCs | uploads/npcs' : undefined,
+    },
+  };
+  globalThis.foundry = {
+    applications: {
+      apps: {
+        FilePicker: {
+          implementation: {
+            browse: async (_source, target, options) => {
+              browseCalls.push({ target, recursive: options?.recursive });
+              if (target === 'world-token-art') {
+                return {
+                  files: ['world-token-art/red-dragon.webp', 'world-token-art/readme.txt'],
+                };
+              }
+              if (target === 'uploads/npcs') {
+                return {
+                  files: ['uploads/npcs/old_merchant.png'],
+                };
+              }
+              return { files: [] };
+            },
+          },
+        },
+      },
+    },
+  };
+
+  try {
+    const index = await rebuildIndex();
+
+    assert.deepEqual(
+      index.map((candidate) => ({
+        label: candidate.label,
+        moduleId: candidate.moduleId,
+        moduleTitle: candidate.moduleTitle,
+        sourceType: candidate.sourceType,
+        tokenSrc: candidate.tokenSrc,
+      })),
+      [
+        {
+          label: 'Red Dragon',
+          moduleId: 'custom-folder:world-token-art',
+          moduleTitle: 'World Token Art',
+          sourceType: 'custom-folder',
+          tokenSrc: 'world-token-art/red-dragon.webp',
+        },
+        {
+          label: 'Old Merchant',
+          moduleId: 'custom-folder:uploads/npcs',
+          moduleTitle: 'My NPCs',
+          sourceType: 'custom-folder',
+          tokenSrc: 'uploads/npcs/old_merchant.png',
+        },
+      ],
+    );
+    assert.deepEqual(getPanelSourceFilterOptions(index), [
+      { id: 'custom-folder:uploads/npcs', title: 'My NPCs', count: 1 },
+      { id: 'custom-folder:world-token-art', title: 'World Token Art', count: 1 },
+    ]);
+    assert.ok(
+      browseCalls.some((call) => call.target === 'world-token-art' && call.recursive === true),
+    );
+  } finally {
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    state.index = [];
+    state.errors = [];
+    state.indexing = null;
+  }
+});
+
 test('folder candidates only include token-looking image files', () => {
   const files = [
     'modules/fantasy-token-collection-dragon-01/resources/images/banner.webp',
@@ -1193,6 +1282,74 @@ test('favorite settings register as client preferences and normalize stored ids'
   assert.equal(calls[0][2].scope, 'client');
   assert.equal(calls[0][2].config, false);
   assert.deepEqual([...getFavoriteIds(settings)], ['b', 'a']);
+});
+
+test('custom folder settings register as world paths and normalize source entries', () => {
+  const calls = [];
+  const settings = {
+    register: (...args) => calls.push(args),
+    get: () => 'world-token-art; My NPCs | uploads/npcs\nworld-token-art',
+  };
+
+  registerCustomFolderSettings(settings);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'pf2e-tokener');
+  assert.equal(calls[0][1], 'customFolders');
+  assert.equal(calls[0][2].scope, 'world');
+  assert.equal(calls[0][2].config, true);
+  assert.equal(calls[0][2].type, String);
+  assert.deepEqual(getCustomFolderSources(settings), [
+    {
+      id: 'custom-folder:world-token-art',
+      path: 'world-token-art',
+      title: 'World Token Art',
+    },
+    {
+      id: 'custom-folder:uploads/npcs',
+      path: 'uploads/npcs',
+      title: 'My NPCs',
+    },
+  ]);
+});
+
+test('custom folder settings use a folder-picker submenu when Foundry forms are available', () => {
+  const previousFormApplication = globalThis.FormApplication;
+  const calls = [];
+  const menuCalls = [];
+  globalThis.FormApplication = class {};
+  const settings = {
+    register: (...args) => calls.push(args),
+    registerMenu: (...args) => menuCalls.push(args),
+    get: () => '',
+  };
+
+  try {
+    registerCustomFolderSettings(settings);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][1], 'customFolders');
+    assert.equal(calls[0][2].config, false);
+    assert.equal(menuCalls.length, 1);
+    assert.equal(menuCalls[0][1], 'customFoldersMenu');
+    assert.equal(menuCalls[0][2].restricted, true);
+    assert.equal(menuCalls[0][2].type, getCustomFolderSettingsApplicationClass());
+  } finally {
+    if (previousFormApplication === undefined) delete globalThis.FormApplication;
+    else globalThis.FormApplication = previousFormApplication;
+  }
+});
+
+test('custom folder settings template uses Foundry folder file picker buttons', () => {
+  const template = fs.readFileSync(
+    new URL('../templates/custom-folders.hbs', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(template, /data-type=['"]folder['"]/);
+  assert.match(template, /data-target=['"]folders\./);
+  assert.match(template, /data-folder-action=['"]add['"]/);
+  assert.match(template, /data-folder-action=['"]remove['"]/);
 });
 
 test('favorite candidate helper toggles ids and filters candidates', async () => {
@@ -1643,10 +1800,7 @@ test('Token HUD button highlights when Tokener override can be reverted', () => 
     const button = target.children.find((child) => child.className.includes('pf2e-tokener-button'));
 
     assert.match(button.className, /is-overridden/);
-    assert.equal(
-      button.dataset.tooltip,
-      'PF2e Tokener - right-click to revert last change.',
-    );
+    assert.equal(button.dataset.tooltip, 'PF2e Tokener - right-click to revert last change.');
   } finally {
     globalThis.document = previousDocument;
     globalThis.game = previousGame;
@@ -1921,7 +2075,10 @@ test('release archive zip command has valid shell continuations', () => {
   assert.equal(lines.filter((line) => /\\\s+$/.test(line)).length, 0);
   assert.match(workflow, /\sstyles\/\s*\\$/m);
   assert.match(workflow, /\slanguages\/\s*$/m);
-  assert.match(workflow, /"compatibility": \{ "minimum": "13", "verified": "14", "maximum": "14" \}/);
+  assert.match(
+    workflow,
+    /"compatibility": \{ "minimum": "13", "verified": "14", "maximum": "14" \}/,
+  );
 });
 
 test('English localization file contains Token HUD strings', () => {
@@ -2272,8 +2429,7 @@ test('ApplicationV2 token picker CSS is scoped outside the Token HUD', () => {
   const appPanelRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-panel\s*\{[^}]+\}/)?.[0] ?? '';
   const appContentRule =
     css.match(/\.pf2e-tokener-app \.pf2e-tokener-content\s*\{[^}]+\}/)?.[0] ?? '';
-  const windowContentRule =
-    css.match(/\.pf2e-tokener-app \.window-content\s*\{[^}]+\}/)?.[0] ?? '';
+  const windowContentRule = css.match(/\.pf2e-tokener-app \.window-content\s*\{[^}]+\}/)?.[0] ?? '';
   const sourceMenuRule =
     css.match(/\.pf2e-tokener-app \.pf2e-tokener-source-menu\s*\{[^}]+\}/)?.[0] ?? '';
 
@@ -2294,12 +2450,9 @@ test('ApplicationV2 token picker keeps search, source, tags, and revert controls
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
   const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
   const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
-  const layoutRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-layout\s*\{[^}]+\}/)?.[0] ?? '';
-  const sidebarRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-sidebar\s*\{[^}]+\}/)?.[0] ?? '';
-  const contentRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-content\s*\{[^}]+\}/)?.[0] ?? '';
+  const layoutRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-layout\s*\{[^}]+\}/)?.[0] ?? '';
+  const sidebarRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-sidebar\s*\{[^}]+\}/)?.[0] ?? '';
+  const contentRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-content\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.match(picker, /width:\s*720/);
   assert.match(template, /class=['"]pf2e-tokener-layout['"]/);
@@ -2308,10 +2461,7 @@ test('ApplicationV2 token picker keeps search, source, tags, and revert controls
     template.indexOf("class='pf2e-tokener-sidebar'") <
       template.indexOf("class='pf2e-tokener-content'"),
   );
-  assert.match(
-    layoutRule,
-    /grid-template-columns:\s*minmax\(210px,\s*240px\) minmax\(0,\s*1fr\);/,
-  );
+  assert.match(layoutRule, /grid-template-columns:\s*minmax\(210px,\s*240px\) minmax\(0,\s*1fr\);/);
   assert.match(sidebarRule, /align-content:\s*start;/);
   assert.match(contentRule, /min-height:\s*0;/);
   assert.match(template, /data-revert-action=['"]last['"]/);
@@ -2354,8 +2504,7 @@ test('accordion tag filter UI supports include and exclude chips', () => {
   const tagChipRule =
     css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\s*\{[^}]+\}/)?.[0] ?? '';
   const excludedRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\.is-excluded\s*\{[^}]+\}/)?.[0] ??
-    '';
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\.is-excluded\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.match(picker, /prepareTagFilterView/);
   assert.match(picker, /excludedTagIds/);
@@ -2394,16 +2543,12 @@ test('tag filter panel uses PF2e Tokener filter styling instead of Character Gal
     css.match(/\.pf2e-tokener-app \.pf2e-tokener-filter-panel\s*\{[^}]+\}/)?.[0] ?? '';
   const toolsRule =
     css.match(/\.pf2e-tokener-app \.pf2e-tokener-filter-tools\s*\{[^}]+\}/)?.[0] ?? '';
-  const facetRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet\s*\{[^}]+\}/)?.[0] ?? '';
+  const facetRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet\s*\{[^}]+\}/)?.[0] ?? '';
   const facetRuleBody =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet::before\s*\{[^}]+\}/)?.[0] ??
-    '';
-  const chipRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\s*\{[^}]+\}/)?.[0] ?? '';
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-facet::before\s*\{[^}]+\}/)?.[0] ?? '';
+  const chipRule = css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\s*\{[^}]+\}/)?.[0] ?? '';
   const includedRule =
-    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\.is-included\s*\{[^}]+\}/)?.[0] ??
-    '';
+    css.match(/\.pf2e-tokener-app \.pf2e-tokener-tag-chip\.is-included\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.equal(translations['PF2ETokener.HUD.Filters'], 'Filters');
   assert.match(template, /pf2e-tokener-filter-panel/);
@@ -2531,8 +2676,7 @@ test('image preview CSS is fullscreen and side by side', () => {
   const hiddenPaneRule = css.match(/\.pf2e-tokener-preview-pane\.is-hidden\s*\{[^}]+\}/)?.[0] ?? '';
   const tagsRule = css.match(/\.pf2e-tokener-preview-tags\s*\{[^}]+\}/)?.[0] ?? '';
   const tagRowRule = css.match(/\.pf2e-tokener-preview-tag-row\s*\{[^}]+\}/)?.[0] ?? '';
-  const tagValuesRule =
-    css.match(/\.pf2e-tokener-preview-tag-values\s*\{[^}]+\}/)?.[0] ?? '';
+  const tagValuesRule = css.match(/\.pf2e-tokener-preview-tag-values\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.match(overlayRule, /position:\s*fixed;/);
   assert.match(overlayRule, /inset:\s*0;/);

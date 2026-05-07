@@ -6,12 +6,14 @@ import {
 } from './constants.js';
 import {
   createDatasheetCandidates,
+  createCustomFolderCandidates,
   createFolderCandidates,
   createMappedCandidates,
   dedupeCandidates,
   getCandidatesForTokenDocument,
   searchCandidates,
 } from './candidates.js';
+import { getCustomFolderSources } from './custom-folders.js';
 import { isObject, normalizePath } from './utils.js';
 
 const DATASHEET_BROWSE_ROOTS = [
@@ -76,6 +78,8 @@ async function buildFoundryIndex() {
     if (!module || module.id === MODULE_ID) continue;
     candidates.push(...(await collectFolderModuleCandidates(module)));
   }
+
+  candidates.push(...(await collectCustomFolderCandidates()));
 
   return candidates;
 }
@@ -160,6 +164,15 @@ async function collectFolderModuleCandidates(module) {
     relatedFiles.push(...(await browseFilesCompat(target)));
   }
   candidates.push(...createFolderCandidates({ module, files: relatedFiles }));
+  return candidates;
+}
+
+async function collectCustomFolderCandidates() {
+  const candidates = [];
+  for (const source of getCustomFolderSources()) {
+    const files = await browseFilesCompat(source.path, { recursive: true });
+    candidates.push(...createCustomFolderCandidates({ source, files }));
+  }
   return candidates;
 }
 

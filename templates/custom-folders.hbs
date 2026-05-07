@@ -1,0 +1,55 @@
+<form class='pf2e-tokener-custom-folders' autocomplete='off'>
+  <p class='notes'>{{hint}}</p>
+
+  <div class='pf2e-tokener-custom-folder-list'>
+    {{#each folders}}
+      <div class='pf2e-tokener-custom-folder-row' data-folder-index='{{index}}'>
+        <input
+          type='text'
+          name='folders.{{index}}.title'
+          value='{{title}}'
+          placeholder='{{titlePlaceholder}}'
+        />
+
+        <div class='pf2e-tokener-custom-folder-path'>
+          <input
+            type='text'
+            name='folders.{{index}}.path'
+            value='{{path}}'
+            placeholder='{{pathPlaceholder}}'
+          />
+          <button
+            class='file-picker'
+            type='button'
+            data-type='folder'
+            data-target='folders.{{index}}.path'
+            data-tooltip='{{browseLabel}}'
+            data-tooltip-direction='UP'
+          >
+            <i class='fas fa-folder-open' aria-hidden='true'></i>
+          </button>
+          <button
+            type='button'
+            data-folder-action='remove'
+            data-folder-index='{{index}}'
+            data-tooltip='{{removeLabel}}'
+            data-tooltip-direction='UP'
+          >
+            <i class='fas fa-trash' aria-hidden='true'></i>
+          </button>
+        </div>
+      </div>
+    {{/each}}
+  </div>
+
+  <footer class='sheet-footer flexrow'>
+    <button type='button' data-folder-action='add'>
+      <i class='fas fa-plus' aria-hidden='true'></i>
+      {{addLabel}}
+    </button>
+    <button type='submit'>
+      <i class='fas fa-save' aria-hidden='true'></i>
+      {{saveLabel}}
+    </button>
+  </footer>
+</form>

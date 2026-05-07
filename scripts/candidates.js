@@ -89,6 +89,28 @@ export function createFolderCandidates({ module, files }) {
     );
 }
 
+export function createCustomFolderCandidates({ source, files }) {
+  if (!source?.id || !Array.isArray(files)) return [];
+  const images = files.map(normalizePath).filter((file) => IMAGE_EXTENSIONS.test(file));
+  const tokenFiles = images.filter(isTokenFolderPath);
+  const art = buildFolderArtLookups(images);
+  const module = {
+    id: source.id,
+    title: source.title || source.path || 'Custom Folder',
+  };
+
+  return (tokenFiles.length ? tokenFiles : images).map((file) =>
+    makeCandidate({
+      label: labelFromPath(file),
+      module,
+      portraitSrc: art.portraits.get(assetStem(file)),
+      sourceType: 'custom-folder',
+      subjectSrc: art.subjects.get(assetStem(file)),
+      tokenSrc: file,
+    }),
+  );
+}
+
 export function searchCandidates(index, query = '', { limit = DEFAULT_LIMIT } = {}) {
   const search = parseCandidateSearch(query);
   const rows = [];
