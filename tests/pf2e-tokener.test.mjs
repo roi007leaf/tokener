@@ -1691,6 +1691,7 @@ test('custom image tag dialog shows selected tags and supports chip removal', ()
   assert.match(picker, /pf2e-tokener-custom-image-tags-selected/);
   assert.match(picker, /data-custom-image-tag-remove/);
   assert.match(picker, /updateCustomImageSelectedTags/);
+  assert.match(picker, /new Set\(tagsToIds\(candidate\.tags\)\)/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-selected\s*\{/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-chip\s*\{/);
 });

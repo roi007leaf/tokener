@@ -889,7 +889,7 @@ function resolveDialogV2Class() {
 }
 
 function renderCustomImageTagsContent(candidate, tagOptions) {
-  const selected = new Set(tagsToIds(candidate.customImageTags));
+  const selected = new Set(tagsToIds(candidate.tags));
   const preparedOptions = tagOptions.map((option) => ({
     ...option,
     groupLabel: normalizeLabel(option.group),
