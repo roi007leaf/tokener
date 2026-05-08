@@ -77,12 +77,13 @@ export function getApplyTargets(action) {
   }
 }
 
-export function buildTokenUpdate(candidate) {
+export function buildTokenUpdate(candidate, { scale } = {}) {
   const tokenSrc = getImageSource(candidate?.tokenSrc);
   if (!tokenSrc) throw new Error('PF2e Tokener candidate has no token image.');
 
-  const scaleX = numberOr(candidate?.scaleX ?? candidate?.scale, 1);
-  const scaleY = numberOr(candidate?.scaleY ?? candidate?.scale, scaleX);
+  const scaleOverride = getScaleOverride(scale);
+  const scaleX = scaleOverride ?? numberOr(candidate?.scaleX ?? candidate?.scale, 1);
+  const scaleY = scaleOverride ?? numberOr(candidate?.scaleY ?? candidate?.scale, scaleX);
   const update = {
     'texture.src': tokenSrc,
     'texture.scaleX': scaleX,
@@ -93,10 +94,9 @@ export function buildTokenUpdate(candidate) {
   if (candidate?.subjectSrc) {
     update['ring.enabled'] = true;
     update['ring.subject.texture'] = candidate.subjectSrc;
-    update['ring.subject.scale'] = numberOr(
-      candidate.subjectScale,
-      Math.max(Math.abs(scaleX), Math.abs(scaleY)),
-    );
+    update['ring.subject.scale'] =
+      scaleOverride ??
+      numberOr(candidate.subjectScale, Math.max(Math.abs(scaleX), Math.abs(scaleY)));
   } else {
     update['ring.enabled'] = false;
   }
@@ -104,13 +104,24 @@ export function buildTokenUpdate(candidate) {
   return update;
 }
 
-export function buildActorUpdate(candidate) {
+export function buildActorUpdate(candidate, options = {}) {
   const actorUpdate = {};
-  for (const [key, value] of Object.entries(buildTokenUpdate(candidate))) {
+  for (const [key, value] of Object.entries(buildTokenUpdate(candidate, options))) {
     actorUpdate[`prototypeToken.${key}`] = value;
   }
   if (candidate?.portraitSrc) actorUpdate.img = candidate.portraitSrc;
   return actorUpdate;
+}
+
+export function buildTokenScalePreviewUpdate(candidate, scale) {
+  const scaleOverride = getScaleOverride(scale);
+  if (scaleOverride === null) return {};
+  const update = {
+    'texture.scaleX': scaleOverride,
+    'texture.scaleY': scaleOverride,
+  };
+  if (candidate?.subjectSrc) update['ring.subject.scale'] = scaleOverride;
+  return update;
 }
 
 export function buildRevertSnapshot({ action, candidate, tokenDocument } = {}) {
@@ -243,4 +254,9 @@ function getImageSource(source) {
 
 function hasImageSource(source) {
   return Boolean(getImageSource(source));
+}
+
+function getScaleOverride(value) {
+  const scale = Number(value);
+  return Number.isFinite(scale) && scale > 0 ? scale : null;
 }

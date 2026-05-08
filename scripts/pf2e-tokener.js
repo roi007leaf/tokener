@@ -12,6 +12,7 @@ export {
   buildRevertSnapshot,
   buildTokenUpdate,
   buildTokenRevertUpdate,
+  buildTokenScalePreviewUpdate,
   getApplyActions,
   getApplyActionsForCandidate,
   getApplyTargets,

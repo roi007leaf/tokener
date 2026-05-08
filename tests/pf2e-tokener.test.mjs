@@ -8,6 +8,7 @@ import {
   buildRevertSnapshot,
   buildTokenUpdate,
   buildTokenRevertUpdate,
+  buildTokenScalePreviewUpdate,
   REVERT_FLAG_PATH,
   getCanvasZoom,
   getApplyActions,
@@ -1810,6 +1811,17 @@ test('picker template renders edit tags for all indexed image cards', () => {
   assert.match(template, /data-custom-image-tags-candidate-id=['"]{{viewId}}['"]/);
 });
 
+test('picker template renders per-card token scale slider controls', () => {
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+
+  assert.match(template, /{{#if scaleControl}}/);
+  assert.match(template, /class=['"]pf2e-tokener-scale-slider['"]/);
+  assert.match(template, /data-scale-value/);
+  assert.match(css, /\.pf2e-tokener-scale-control\s*\{/);
+  assert.match(css, /\.pf2e-tokener-scale-slider\s*\{/);
+});
+
 test('custom image tag dialog shows selected tags and supports chip removal', () => {
   const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
@@ -1847,7 +1859,23 @@ test('tag changes preserve picker scroll during refresh', () => {
 test('applying token art preserves picker result scroll during refresh', () => {
   const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
 
-  assert.match(picker, /applyCandidateAction[\s\S]*renderMainPart\(activePicker, \{ preserveScroll: true \}\)/);
+  assert.match(
+    picker,
+    /applyCandidateAction[\s\S]*renderMainPart\(activePicker, \{ preserveScroll: true \}\)/,
+  );
+});
+
+test('token scale slider previews scene token scale and reuses preview revert snapshot', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+
+  assert.match(picker, /\.pf2e-tokener-scale-slider/);
+  assert.match(picker, /handleScaleSliderInput/);
+  assert.match(picker, /buildTokenScalePreviewUpdate/);
+  assert.match(picker, /_scalePreviewSnapshots/);
+  assert.match(picker, /buildApplyRevertSnapshot/);
+  assert.match(picker, /closestTarget\(target, '.pf2e-tokener-scale-control'\)/);
+  assert.match(picker, /buildTokenUpdate\(candidate, \{ scale/);
+  assert.match(picker, /buildActorUpdate\(candidate, \{ scale/);
 });
 
 test('favorite candidate helper toggles ids and filters candidates', async () => {
@@ -1898,6 +1926,75 @@ test('token update preserves dynamic ring fields when subject art exists', () =>
     'ring.subject.scale': 2,
     randomImg: false,
   });
+});
+
+test('token update applies linked scale override to token and dynamic subject', () => {
+  const update = buildTokenUpdate(
+    {
+      tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+      subjectSrc: 'modules/pkg/assets/subjects/dragon.webp',
+      scaleX: 2,
+      scaleY: 2,
+      subjectScale: 2,
+    },
+    { scale: 1.35 },
+  );
+
+  assert.equal(update['texture.scaleX'], 1.35);
+  assert.equal(update['texture.scaleY'], 1.35);
+  assert.equal(update['ring.subject.scale'], 1.35);
+});
+
+test('actor update applies linked scale override to prototype token fields', () => {
+  const update = buildActorUpdate(
+    {
+      tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+      portraitSrc: 'modules/pkg/assets/art/dragon.webp',
+      subjectSrc: 'modules/pkg/assets/subjects/dragon.webp',
+      scaleX: 2,
+      scaleY: 2,
+      subjectScale: 2,
+    },
+    { scale: 0.85 },
+  );
+
+  assert.equal(update['prototypeToken.texture.scaleX'], 0.85);
+  assert.equal(update['prototypeToken.texture.scaleY'], 0.85);
+  assert.equal(update['prototypeToken.ring.subject.scale'], 0.85);
+});
+
+test('invalid linked scale override falls back to candidate scale', () => {
+  const update = buildTokenUpdate(
+    {
+      tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+      subjectSrc: 'modules/pkg/assets/subjects/dragon.webp',
+      scaleX: 1.2,
+      scaleY: 1.2,
+      subjectScale: 1.4,
+    },
+    { scale: '' },
+  );
+
+  assert.equal(update['texture.scaleX'], 1.2);
+  assert.equal(update['texture.scaleY'], 1.2);
+  assert.equal(update['ring.subject.scale'], 1.4);
+});
+
+test('token scale preview update changes selected token scale only', () => {
+  assert.deepEqual(
+    buildTokenScalePreviewUpdate(
+      {
+        tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+        subjectSrc: 'modules/pkg/assets/subjects/dragon.webp',
+      },
+      1.45,
+    ),
+    {
+      'texture.scaleX': 1.45,
+      'texture.scaleY': 1.45,
+      'ring.subject.scale': 1.45,
+    },
+  );
 });
 
 test('token update disables dynamic ring when no subject art exists', () => {

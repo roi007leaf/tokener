@@ -342,6 +342,28 @@
   display: grid;
 }
 
+#token-hud .pf2e-tokener-scale-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px;
+  align-items: center;
+  color: var(--color-text-light-6, #cfc6b8);
+  font-size: 10px;
+  line-height: 1;
+}
+
+#token-hud .pf2e-tokener-scale-value {
+  color: var(--color-text-light-highlight, #f5f2e8);
+  font-variant-numeric: tabular-nums;
+}
+
+#token-hud .pf2e-tokener-scale-slider {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+
 #token-hud .pf2e-tokener-actions button {
   height: 24px;
   padding: 0 4px;
@@ -1231,6 +1253,28 @@
 
 .pf2e-tokener-app .pf2e-tokener-card.is-open .pf2e-tokener-actions {
   display: grid;
+}
+
+.pf2e-tokener-app .pf2e-tokener-scale-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 3px;
+  align-items: center;
+  color: var(--color-text-light-6, #cfc6b8);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.pf2e-tokener-app .pf2e-tokener-scale-value {
+  color: var(--color-text-light-highlight, #f5f2e8);
+  font-variant-numeric: tabular-nums;
+}
+
+.pf2e-tokener-app .pf2e-tokener-scale-slider {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
 }
 
 .pf2e-tokener-app .pf2e-tokener-actions button {

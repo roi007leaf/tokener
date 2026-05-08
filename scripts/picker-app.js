@@ -2,6 +2,7 @@ import { DEFAULT_LIMIT, MODULE_ID } from './constants.js';
 import {
   buildActorUpdate,
   buildRevertSnapshot,
+  buildTokenScalePreviewUpdate,
   buildTokenUpdate,
   getApplyActionsForCandidate,
   getApplyTargets,
@@ -39,6 +40,9 @@ import {
 } from './utils.js';
 
 const PICKER_TEMPLATE = 'modules/pf2e-tokener/templates/picker.hbs';
+const SCALE_MIN = 0.25;
+const SCALE_MAX = 3;
+const SCALE_STEP = 0.05;
 
 let activePicker = null;
 let TokenPickerApplicationBase = null;
@@ -133,6 +137,9 @@ export function getTokenPickerApplicationClass(
       this.favoritesOnly = false;
       this.resultLimit = DEFAULT_LIMIT;
       this._candidateMap = new Map();
+      this._pendingScalePreview = null;
+      this._scalePreviewScheduled = false;
+      this._scalePreviewSnapshots = new Map();
       this._tagMap = new Map();
     }
 
@@ -291,6 +298,11 @@ function markPickerRootBound(root) {
 
 function handlePickerInput(app, event) {
   const target = event.target;
+  if (matchesTarget(target, '.pf2e-tokener-scale-slider')) {
+    handleScaleSliderInput(app, target);
+    return;
+  }
+
   if (matchesTarget(target, '.pf2e-tokener-search')) {
     app.searchQuery = target.value;
     resetResultLimit(app);
@@ -315,6 +327,11 @@ function handlePickerInput(app, event) {
 
 async function handlePickerClick(app, event) {
   const target = event.target;
+  if (closestTarget(target, '.pf2e-tokener-scale-control')) {
+    event.stopPropagation?.();
+    return;
+  }
+
   if (closestTarget(target, '[data-revert-action="last"]')) {
     event.preventDefault?.();
     await revertLastChange(app);
@@ -363,6 +380,7 @@ async function handlePickerClick(app, event) {
         candidate,
         app.tokenDocument,
         card,
+        app,
       );
     return;
   }
@@ -596,6 +614,77 @@ function restorePickerScroll(app, root) {
   (globalThis.requestAnimationFrame ?? globalThis.setTimeout)?.(applyScroll, 0);
 }
 
+function handleScaleSliderInput(app, input) {
+  const card = closestTarget(input, '.pf2e-tokener-card');
+  const candidate = app?._candidateMap?.get(card?.dataset?.candidateId);
+  if (!card || !candidate) return;
+
+  const scale = readCardScaleValue(card, candidate);
+  updateCardScaleValue(card, scale);
+  ensureScalePreviewSnapshot(app, card, candidate);
+  scheduleScalePreviewUpdate(app, candidate, scale, card.dataset.candidateId);
+}
+
+function readCardScaleValue(card, candidate) {
+  const input = card?.querySelector?.('.pf2e-tokener-scale-slider');
+  return Number(
+    formatScaleValue(
+      input?.value ?? input?.dataset?.scaleDefault ?? getCandidateLinkedScale(candidate),
+    ),
+  );
+}
+
+function updateCardScaleValue(card, scale) {
+  const value = formatScaleValue(scale);
+  const input = card?.querySelector?.('.pf2e-tokener-scale-slider');
+  if (input) input.value = value;
+  const display = card?.querySelector?.('[data-scale-value]');
+  if (display) display.textContent = `${value}x`;
+}
+
+function ensureScalePreviewSnapshot(app, card, candidate) {
+  const candidateId = card?.dataset?.candidateId;
+  if (!app || !candidateId) return;
+  if (!app._scalePreviewSnapshots) app._scalePreviewSnapshots = new Map();
+  if (app._scalePreviewSnapshots.has(candidateId)) return;
+  app._scalePreviewSnapshots.set(
+    candidateId,
+    buildRevertSnapshot({ action: 'token', candidate, tokenDocument: app.tokenDocument }),
+  );
+}
+
+function scheduleScalePreviewUpdate(app, candidate, scale, candidateId) {
+  if (!app?.tokenDocument?.update) return;
+  app._pendingScalePreview = { candidate, candidateId, scale };
+  if (app._scalePreviewScheduled) return;
+
+  app._scalePreviewScheduled = true;
+  const schedule =
+    globalThis.requestAnimationFrame ??
+    ((callback) => globalThis.setTimeout?.(callback, 0) ?? callback());
+  schedule(() => void flushScalePreviewUpdate(app));
+}
+
+async function flushScalePreviewUpdate(app) {
+  const pending = app?._pendingScalePreview;
+  app._pendingScalePreview = null;
+  app._scalePreviewScheduled = false;
+  if (!pending) return;
+
+  const update = buildTokenScalePreviewUpdate(pending.candidate, pending.scale);
+  if (!Object.keys(update).length || !app?.tokenDocument?.update) return;
+
+  try {
+    const snapshot = app._scalePreviewSnapshots?.get(pending.candidateId);
+    await app.tokenDocument.update({
+      ...update,
+      ...(snapshot ? { [REVERT_FLAG_PATH]: snapshot } : {}),
+    });
+  } catch (error) {
+    console.error(`${MODULE_ID} | Failed to preview token scale`, error);
+  }
+}
+
 function matchesTarget(target, selector) {
   return Boolean(target?.matches?.(selector));
 }
@@ -808,6 +897,7 @@ function preparePagingView(candidatePool) {
 
 function prepareCandidateSections(candidates, app, favoriteIds = new Set()) {
   app._candidateMap = new Map();
+  app._scalePreviewSnapshots?.clear?.();
   const pinned = candidates.filter(
     (candidate) => candidate.matchType === 'exact' || candidate.matchType === 'name',
   );
@@ -862,9 +952,46 @@ function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
     previewSrc: previewSrc,
     cardTooltip: getCandidateCardTooltip(candidate),
     imageTagsTooltip: localize('HUD.EditCustomImageTags', 'Edit image tags'),
+    scaleControl: hasTokenScaleAction(actions) ? prepareScaleControlView(candidate) : null,
     tabIndex: isUnavailable ? '-1' : '0',
     viewId,
   };
+}
+
+function hasTokenScaleAction(actions) {
+  return actions.some(
+    (option) => option.action === 'token' || option.action === 'actor' || option.action === 'both',
+  );
+}
+
+function prepareScaleControlView(candidate) {
+  const value = formatScaleValue(getCandidateLinkedScale(candidate));
+  return {
+    label: localize('HUD.Scale', 'Scale'),
+    max: SCALE_MAX,
+    min: SCALE_MIN,
+    step: SCALE_STEP,
+    tooltip: localize('HUD.ScaleTooltip', 'Preview token scale'),
+    value,
+    valueLabel: `${value}x`,
+  };
+}
+
+function getCandidateLinkedScale(candidate) {
+  const scaleX = Number(candidate?.scaleX ?? candidate?.scale ?? 1);
+  const scaleY = Number(candidate?.scaleY ?? candidate?.scale ?? scaleX);
+  const scale = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : scaleY;
+  return clampScaleValue(scale);
+}
+
+function clampScaleValue(value) {
+  const scale = Number(value);
+  if (!Number.isFinite(scale) || scale <= 0) return 1;
+  return Math.min(SCALE_MAX, Math.max(SCALE_MIN, scale));
+}
+
+function formatScaleValue(value) {
+  return String(Number(clampScaleValue(value).toFixed(2)));
 }
 
 async function openCustomImageTagsDialog(app, candidate) {
@@ -1208,7 +1335,7 @@ function toggleCardActions(card) {
   card.classList.toggle('is-open');
 }
 
-async function applyCandidateAction(action, candidate, tokenDocument, card) {
+async function applyCandidateAction(action, candidate, tokenDocument, card, app = activePicker) {
   const actor = getDocumentActor(tokenDocument);
   const availableAction = getApplyActionsForCandidate(candidate).some(
     (option) => option.action === action,
@@ -1216,20 +1343,21 @@ async function applyCandidateAction(action, candidate, tokenDocument, card) {
   if (!availableAction) return;
 
   const targets = getApplyTargets(action);
-  const revertSnapshot = buildRevertSnapshot({ action, candidate, tokenDocument });
+  const scale = readCardScaleValue(card, candidate);
+  const revertSnapshot = buildApplyRevertSnapshot(app, action, candidate, tokenDocument, card);
   card?.classList.add('is-applying');
 
   try {
     if (targets.token) {
       await tokenDocument.update({
-        ...buildTokenUpdate(candidate),
+        ...buildTokenUpdate(candidate, { scale }),
         [REVERT_FLAG_PATH]: revertSnapshot,
       });
     }
 
     if (targets.actor && actor) {
       await actor.update({
-        ...buildActorUpdate(candidate),
+        ...buildActorUpdate(candidate, { scale }),
         [REVERT_FLAG_PATH]: revertSnapshot,
       });
     }
@@ -1253,6 +1381,13 @@ async function applyCandidateAction(action, candidate, tokenDocument, card) {
     card?.classList.remove('is-applying');
     renderMainPart(activePicker, { preserveScroll: true });
   }
+}
+
+function buildApplyRevertSnapshot(app, action, candidate, tokenDocument, card) {
+  const snapshot = buildRevertSnapshot({ action, candidate, tokenDocument });
+  const previewSnapshot = app?._scalePreviewSnapshots?.get(card?.dataset?.candidateId);
+  if (previewSnapshot?.token) snapshot.token = previewSnapshot.token;
+  return snapshot;
 }
 
 async function revertLastChange(app) {

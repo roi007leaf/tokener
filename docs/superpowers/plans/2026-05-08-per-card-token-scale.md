@@ -13,6 +13,7 @@
 ### Task 1: Scale Update Builders
 
 **Files:**
+
 - Modify: `scripts/actions.js`
 - Modify: `scripts/pf2e-tokener.js`
 - Test: `tests/pf2e-tokener.test.mjs`
@@ -104,7 +105,8 @@ export function buildTokenUpdate(candidate, { scale } = {}) {
     update['ring.enabled'] = true;
     update['ring.subject.texture'] = candidate.subjectSrc;
     update['ring.subject.scale'] =
-      scaleOverride ?? numberOr(candidate.subjectScale, Math.max(Math.abs(scaleX), Math.abs(scaleY)));
+      scaleOverride ??
+      numberOr(candidate.subjectScale, Math.max(Math.abs(scaleX), Math.abs(scaleY)));
   } else {
     update['ring.enabled'] = false;
   }
@@ -138,6 +140,7 @@ Expected: PASS.
 ### Task 2: Live Preview Update Helper
 
 **Files:**
+
 - Modify: `scripts/actions.js`
 - Modify: `scripts/pf2e-tokener.js`
 - Test: `tests/pf2e-tokener.test.mjs`
@@ -199,6 +202,7 @@ Expected: PASS.
 ### Task 3: Slider Rendering
 
 **Files:**
+
 - Modify: `scripts/picker-app.js`
 - Modify: `templates/picker.hbs`
 - Modify: `styles/pf2e-tokener.css`
@@ -248,7 +252,9 @@ Use helpers:
 
 ```js
 function hasTokenScaleAction(actions) {
-  return actions.some((option) => option.action === 'token' || option.action === 'actor' || option.action === 'both');
+  return actions.some(
+    (option) => option.action === 'token' || option.action === 'actor' || option.action === 'both',
+  );
 }
 
 function prepareScaleControlView(candidate) {
@@ -315,6 +321,7 @@ Expected: PASS.
 ### Task 4: Slider Live Preview and Apply Integration
 
 **Files:**
+
 - Modify: `scripts/picker-app.js`
 - Test: `tests/pf2e-tokener.test.mjs`
 
@@ -384,7 +391,9 @@ function scheduleScalePreviewUpdate(app, candidate, scale, candidateId) {
   app._pendingScalePreview = { candidate, candidateId, scale };
   if (app._scalePreviewScheduled) return;
   app._scalePreviewScheduled = true;
-  const schedule = globalThis.requestAnimationFrame ?? ((callback) => globalThis.setTimeout?.(callback, 0) ?? callback());
+  const schedule =
+    globalThis.requestAnimationFrame ??
+    ((callback) => globalThis.setTimeout?.(callback, 0) ?? callback());
   schedule(() => void flushScalePreviewUpdate(app));
 }
 ```
@@ -427,6 +436,7 @@ Expected: PASS.
 ### Task 5: Verification and Cleanup
 
 **Files:**
+
 - Modify: `CHANGELOG.md` if the repository expects user-facing changes to be recorded.
 
 - [ ] **Step 1: Run full test suite**
@@ -468,4 +478,3 @@ Run:
 git add scripts/actions.js scripts/pf2e-tokener.js scripts/picker-app.js templates/picker.hbs styles/pf2e-tokener.css languages/en.json tests/pf2e-tokener.test.mjs CHANGELOG.md
 git commit -m "feat: add live token scale sliders"
 ```
-

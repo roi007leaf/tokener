@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Added per-card token scale sliders with live selected-token preview.
+
 ## 1.0.6 - 2026-05-07
 
 ### Fixed
