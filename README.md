@@ -1,35 +1,50 @@
 # PF2e Tokener
 
-PF2e Tokener adds a fast token image picker to the Foundry VTT Token HUD for Pathfinder Second Edition.
+PF2e Tokener adds a searchable token art picker to the Foundry VTT Token HUD for Pathfinder Second Edition.
 
-When you select a token, open its HUD, and click the PF2e Tokener button, you get a searchable gallery of token art from your enabled token modules. The gallery opens as a Foundry window, so it stays in place while you pan or zoom the canvas. Pick an image, choose what to update, and keep playing.
+Select a token, open its HUD, click the PF2e Tokener button, then search and apply art from enabled token modules or your own world data folders. The picker opens as a Foundry ApplicationV2 window, so it stays open while you pan or zoom the canvas.
 
-Search, source filters, tags, favorites, and undo controls sit in a left sidebar so the result grid keeps most of the window space for token art.
+PF2e Tokener does not include art. It indexes image files and art metadata from other enabled sources, then points selected tokens and actors at those existing images.
 
-## Who This Is For
+## Feature Summary
 
-PF2e Tokener is for GMs who use several PF2e token art modules and want a quicker way to swap token art during prep or play.
-
-Use it when you want to:
-
-- Try alternate art for a creature.
-- Swap a scene token without opening the token sheet.
-- Update an actor portrait and token from the same place.
-- Search across several installed token packs at once.
-- Keep preferred art one click away with favorites.
-- Compare the portrait and token art before choosing.
+- Token HUD button for selected PF2e tokens.
+- Searchable gallery of token art from enabled PF2e token modules.
+- Support for mapped module art, gallery datasheets, common token folders, actor portraits, and dynamic token ring subject art.
+- Custom world data folders with optional source names, recursive scans, folder browser thumbnails, source-level tags, nested `folder:*` tags, and advanced split paths for token, portrait/artwork, and subject images.
+- Search by creature name, NPC name, filename, module/source name, broad terms, or tags.
+- Multi-source filter with source search, select all, and clear all.
+- Tag filters grouped by category, with include and exclude controls.
+- Direct tag search syntax such as `ancestry:human`, `equipment:sword`, `tag:magic`, and `!family:undead`.
+- Client-side favorites with a sidebar favorites filter.
+- GM image tag overrides for any indexed image, with source tags kept read-only.
+- Matched tag chips on result cards and grouped tags in fullscreen preview.
+- `Token`, `Actor`, `Portrait`, and `Both` apply actions.
+- Revert last Tokener change from the sidebar or by right-clicking the highlighted HUD button.
+- Current-token marker, result counts, paging with `Show more`, and scroll preservation while applying art or changing filters.
 
 ## Compatibility
 
 - Foundry VTT v13 and v14.
 - Pathfinder Second Edition worlds.
-- Works best with enabled PF2e token art modules.
+- Best with enabled PF2e or compatible token art modules.
 
 ## Supported Art Sources
 
-PF2e Tokener looks through enabled token modules and builds a temporary gallery when your world loads.
+PF2e Tokener builds its index when the world loads and when relevant Tokener settings change.
 
-It supports common PF2e token module styles, including:
+It can index:
+
+- PF2e compendium art mappings.
+- Older `pf2e-art` mapping modules.
+- Gallery datasheets with searchable tags.
+- Datasheet JSON files discovered in common module data folders.
+- Token images in common module paths such as `tokens`, `assets/tokens`, and `resources/tokens`.
+- Matching portrait art in paths such as `art`, `portraits`, `assets/art`, `assets/portraits`, `resources/art`, and `resources/portraits`.
+- Matching dynamic token subject art in paths such as `subjects`, `assets/subjects`, and `resources/subjects`.
+- Custom world data folders configured in the module settings.
+
+Known compatible source styles include:
 
 - Pathfinder Tokens: Bestiaries
 - Pathfinder Tokens: Monster Core
@@ -40,158 +55,164 @@ It supports common PF2e token module styles, including:
 - Pathfinder Tokens: Draconic Codex
 - Starfinder Tokens: Alien Core
 - older PF2e art mapping modules such as PF2e All Tokens
-- other token modules that store images in recognizable token folders
+- other token modules that use recognizable token folders or datasheets
 
-Some third-party modules only include token images and do not include actor portrait images. In those cases, PF2e Tokener hides the missing image side and shows only the art it can use.
+Some sources only provide token images. When portrait or subject art is missing, PF2e Tokener hides unavailable panes and actions instead of showing broken image placeholders.
 
 ## Installation
 
-1. Install the module in Foundry VTT.
-2. Enable PF2e Tokener in your PF2e world.
-3. Enable the token art modules you want to use.
+1. Install PF2e Tokener in Foundry VTT.
+2. Enable it in a Pathfinder Second Edition world.
+3. Enable the token art modules you want to search.
 4. Reload the world.
 
-PF2e Tokener does not include token art by itself. It uses art from other enabled modules.
+Reload after enabling or disabling token art modules so the index can be rebuilt.
 
 ## How To Use
 
 1. Select a token on the canvas.
 2. Open the Token HUD.
 3. Click the PF2e Tokener image button.
-4. Search for a creature, NPC, or art source.
-5. Use the source filter if you want to limit results to one or more token packs.
-6. Mark useful results with the star button if you want to find them again quickly.
-7. Click a thumbnail to show the action buttons.
-8. Choose what you want to update.
+4. Search, filter, or browse matching art.
+5. Click a card to reveal apply buttons.
+6. Choose what to update.
 
-## Action Buttons
+Right-click a result card to open fullscreen preview.
 
-| Button     | What It Changes                                        |
-| ---------- | ------------------------------------------------------ |
-| `Token`    | Only the selected token on the current scene.          |
-| `Actor`    | The actor portrait and the actor's default token art.  |
-| `Portrait` | Only the actor portrait.                               |
-| `Both`     | The selected scene token and the actor's default token |
+## Apply Actions
+
+| Button     | What It Changes                                                                                                 |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| `Token`    | Selected token on the current scene. Also applies dynamic token ring subject art when available.                |
+| `Actor`    | Actor portrait and actor default token art. Also applies default dynamic token ring subject art when available. |
+| `Portrait` | Actor portrait only. Uses separate portrait art when available, otherwise falls back to token art.              |
+| `Both`     | Selected scene token plus actor default token art. Also updates actor portrait when portrait art is available.  |
 
 Use `Token` for a one-time scene change.
 
-Use `Actor` when you want future tokens created from that actor to use the new art.
+Use `Actor` when future tokens created from that actor should use the new art.
 
-Use `Portrait` when you only want the actor sheet image to change.
+Use `Portrait` when only the actor sheet image should change.
 
-Use `Both` when you want the current token and the actor's default token to match.
+Use `Both` when the current scene token and future actor tokens should match.
 
 ## Reverting Changes
 
-After PF2e Tokener changes token or actor art, it remembers what was there before that change.
+After applying art, PF2e Tokener stores one recent revert point for the selected token or actor.
 
-Use `Revert last` in the left sidebar to restore the previous art for the last Tokener action on that selected token or actor.
+Use `Revert last` in the sidebar to restore the previous art for the last Tokener action. When a token or actor has a revert point, the PF2e Tokener HUD button is highlighted. Right-click that highlighted HUD button to revert without opening the picker.
 
-When a token or actor has a Tokener change that can be reverted, the PF2e Tokener HUD button is highlighted. Right-click that highlighted HUD button to revert without opening the picker.
+Revert can restore:
 
-This can restore:
+- selected scene token image, scale, and ring subject data
+- actor default token image, scale, and ring subject data
+- actor portrait
 
-- the selected scene token image
-- the actor's default token image
-- the actor portrait
+Making another Tokener change replaces the stored revert point.
 
-PF2e Tokener stores one recent revert point for the selected token or actor. Making another Tokener change replaces that revert point.
+## Searching And Filtering
 
-## Previewing Art
-
-Right-click any result to open a fullscreen preview.
-
-The preview shows:
-
-- actor portrait image on the left
-- token image on the right
-- associated tags below the image, grouped by category
-
-Close the preview with:
-
-- the close button
-- `Escape`
-- clicking outside the preview
-
-## Searching
-
-The search box starts empty so you can search immediately. PF2e Tokener still uses the selected token behind the scenes to show best matches first.
+The search box starts empty so you can type immediately. PF2e Tokener still uses the selected token behind the scenes to put exact and same-name results in `Best matches`.
 
 You can search by:
 
-- creature name
-- NPC name
+- creature or NPC name
 - token filename
-- token module name
-- tags from supported galleries, such as ancestry, equipment, family, category, or features
-- broad terms such as `dragon`, `kobold`, or `guard`
+- module or source name
+- folder name from custom folders
+- tags from supported galleries and GM overrides
+- broad terms such as `dragon`, `kobold`, `guard`, or `sword`
 
-Some gallery modules include tags. For example, a search like `human sword warrior` can find art tagged with those ideas even when they are not all in the character name.
+The left sidebar includes:
 
-Use the `Filters` panel in the left sidebar to browse available tags. Tags are grouped by category, such as ancestry, equipment, family, features, and special traits. The filter panel has its own search box, so you can quickly narrow a long list of tags without changing your main token search.
+- source filter with source search, select all, and clear all
+- `Favorites` filter
+- grouped `Filters` panel for tags
+- tag search inside the filter panel
+- active included and excluded tag chips
+- `Clear tags`
+- `Revert last` when available
 
-Selecting a tag filters the results without changing the text in the main search box. Active tags appear as small chips and can be removed one at a time or cleared together.
+Selecting a source, tag, excluded tag, or favorites filter while the main search box is empty browses all matching art. PF2e Tokener shows the first 120 results and offers `Show more` when more matches are available.
 
-You can also exclude tags. Use the small minus button beside a tag to hide art with that tag. Included tags are shown with `+`; excluded tags are shown with `-`.
-
-When you select a source, tag, excluded tag, or favorites filter while the search box is empty, PF2e Tokener browses all matching art instead of staying locked to the selected token. It shows the first 120 results and offers `Show more` when more matches are available.
-
-You can also use direct tag searches:
+Direct tag searches work in the main search box:
 
 - `ancestry:human`
 - `equipment:sword`
 - `family:warrior`
 - `category:humanoid`
 - `tag:magic`
+- `folder:npcs`
 - `!equipment:firearm`
 - `-family:undead`
 
-When a tag helped match a result, PF2e Tokener shows the matched tags as small chips on that result.
-
-Best matches appear first. Broader results appear below them.
+When a tag helps match a result, PF2e Tokener shows that matched tag on the result card.
 
 ## Favorites
 
 Click the star on any result to mark that art as a favorite.
 
-Use the `Favorites` button in the left sidebar to show only your favorite token art. Click it again to return to the full result list.
+Use `Favorites` in the sidebar to show only starred art. Favorites are saved as a client setting, so each Foundry user keeps their own favorite list.
 
-Favorites are saved for your Foundry client. They are personal to you and do not change the world for other users.
+## Image Tag Overrides
 
-Result cards show the art name. Hover a shortened card name to see the full name and the source module.
+GMs can click the tag button on a result card to edit GM-added tags for that image.
 
-## Source Filter
+Image tag overrides:
 
-The source filter lets you choose which token packs to search.
+- work on all indexed art sources, not only custom folders
+- are saved as a world setting
+- are searchable and filterable after the index rebuilds
+- can use existing tag groups or new custom group/value pairs
+- preserve original source tags as read-only tags
 
-You can:
-
-- search all sources
-- pick one source
-- pick several sources
-- clear all sources
-- select all sources again
-
-This is useful when several modules include similar creatures.
+Original module or datasheet tags are not changed.
 
 ## Custom Folders
 
-Use the `Custom token folders` module setting to add world data folders as extra sources. Click `Configure`, give each folder a source name, then use the folder button to choose the folder with Foundry's file picker.
+Use `Configure` beside the `Custom token folders` module setting to add your own world data folders as extra sources.
 
-You can also type paths manually. Enter one or more paths separated by commas, semicolons, or new lines:
+Each custom folder can have:
+
+- source name
+- token folder path
+- source-level tags applied to every indexed image from that folder
+- optional portrait/artwork folder path
+- optional dynamic token subject folder path
+
+Use the folder button to browse Foundry data folders. The custom folder browser shows subfolders and image thumbnails so you can confirm the folder before selecting it.
+
+PF2e Tokener scans custom folders recursively. If images live under recognizable `tokens`, `art`, `portraits`, or `subjects` folders, it links token, portrait, and subject images by matching filenames. If no token folder is found, every image in the custom folder can be treated as token art.
+
+Nested custom folder names become searchable `folder:*` tags, excluding structural names such as `tokens`, `art`, `portraits`, `subjects`, `assets`, and `resources`.
+
+You can also type simple paths manually in the setting:
 
 - `tokens/npcs`
 - `My NPCs | uploads/npcs`
 
-PF2e Tokener scans those folders recursively. If a folder contains recognizable `tokens`, `art`, or `subjects` subfolders, it uses the token images and links matching actor or subject art by filename. Otherwise, every image in the custom folder is treated as token art.
+Separate multiple entries with commas, semicolons, or new lines. Structured custom folder settings remain compatible with older plain path entries.
 
-## Current Token Marker
+## Previewing Art
 
-If a result already matches the selected token's current image, it is marked as current.
+Right-click any result to open fullscreen preview.
 
-## Canvas Pan And Zoom
+The preview shows:
 
-The picker opens in its own Foundry window. It does not disappear when the canvas pans, and it stays readable while the canvas zoom changes.
+- actor portrait image when available
+- token image when available
+- source module or custom source name
+- associated tags grouped by category
+
+Close preview with the close button, `Escape`, or clicking outside the preview.
+
+## Notes
+
+- PF2e Tokener only changes token and actor image references.
+- It does not change, copy, import, or generate image files.
+- It rebuilds its gallery index on world load and after Tokener tag or custom folder setting changes.
+- Result cards use the best available preview source and recover when one image side is missing.
+- Utility images such as hazards, treasure, rings, backgrounds, or trackers may not have actor portraits.
 
 ## Troubleshooting
 
@@ -201,25 +222,29 @@ Check that:
 
 - the world is using the Pathfinder Second Edition system
 - PF2e Tokener is enabled
-- you selected a token
-- you have permission to update that token
+- a token is selected
+- your user has permission to update that token
+- your Foundry version supports ApplicationV2
 
 ### Search Shows No Results
 
 Check that:
 
-- at least one token art module is enabled
+- at least one token art module or custom folder source is enabled
 - the world was reloaded after enabling token modules
-- your source filter is not hiding the module you want
+- custom folder paths point inside Foundry data storage
+- source, favorites, included tags, or excluded tags are not hiding the art
 - the search text is not too specific
 
-Try clearing the search and source filter.
+Try clearing search, sources, favorites, and tags.
 
 ### Actor Image Is Missing In Preview
 
-Some modules only provide token art. Others provide actor portraits too.
+Some sources only provide token art. PF2e Tokener shows portrait panes only when portrait art exists or can be linked by filename.
 
-If PF2e Tokener can find both, it shows both. If a module only has token art, the preview shows only the token image.
+### Dynamic Token Ring Subject Is Missing
+
+Subject art is only applied when the source provides matching subject art through mappings, datasheets, recognized `subjects` folders, or the custom folder subject path.
 
 ### I Enabled A New Token Module But Do Not See It
 
@@ -227,14 +252,7 @@ Reload the Foundry world after enabling or disabling token art modules.
 
 ### The Wrong Pack Appears First
 
-PF2e Tokener puts exact actor matches first when it can identify them. If several packs have similar names or art, use the source filter to narrow the results.
-
-## Notes
-
-- PF2e Tokener does not change or copy image files.
-- PF2e Tokener does not add new art to your world.
-- PF2e Tokener only points selected tokens and actors at images that already exist in enabled modules.
-- The gallery is rebuilt when the world loads.
+PF2e Tokener puts exact actor matches and same-name results first when it can identify them. If several packs have similar names or art, use the source filter to narrow results.
 
 ## License
 
