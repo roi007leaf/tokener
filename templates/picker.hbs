@@ -219,26 +219,35 @@
 
                   {{#if hasActions}}
                     <div class='pf2e-tokener-actions'>
-                      {{#if scaleControl}}
-                        <div class='pf2e-tokener-scale-control'>
-                          <label>{{scaleControl.label}}</label>
-                          <span
-                            class='pf2e-tokener-scale-value'
-                            data-scale-value
-                          >{{scaleControl.valueLabel}}</span>
-                          <input
-                            class='pf2e-tokener-scale-slider'
-                            type='range'
-                            min='{{scaleControl.min}}'
-                            max='{{scaleControl.max}}'
-                            step='{{scaleControl.step}}'
-                            value='{{scaleControl.value}}'
-                            data-scale-default='{{scaleControl.value}}'
-                            aria-label='{{scaleControl.tooltip}}'
-                            data-tooltip='{{scaleControl.tooltip}}'
-                            data-tooltip-direction='UP'
-                          />
-                        </div>
+                      {{#if hasScaleControls}}
+                        {{#each scaleControls}}
+                          <div class='pf2e-tokener-scale-control' data-scale-control='{{target}}'>
+                            <label>{{label}}</label>
+                            <span
+                              class='pf2e-tokener-scale-value'
+                              data-scale-value='{{target}}'
+                            >{{valueLabel}}</span>
+                            <button
+                              class='pf2e-tokener-scale-reset'
+                              type='button'
+                              data-scale-reset='{{target}}'
+                              aria-label='{{resetLabel}}'
+                            >
+                              <i class='fas fa-undo' aria-hidden='true'></i>
+                            </button>
+                            <input
+                              class='pf2e-tokener-scale-slider'
+                              type='range'
+                              min='{{min}}'
+                              max='{{max}}'
+                              step='{{step}}'
+                              value='{{value}}'
+                              data-scale-default='{{value}}'
+                              data-scale-target='{{target}}'
+                              aria-label='{{tooltip}}'
+                            />
+                          </div>
+                        {{/each}}
                       {{/if}}
                       {{#each actions}}
                         <button

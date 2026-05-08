@@ -77,13 +77,16 @@ export function getApplyTargets(action) {
   }
 }
 
-export function buildTokenUpdate(candidate, { scale } = {}) {
+export function buildTokenUpdate(candidate, { scale, ringScale } = {}) {
   const tokenSrc = getImageSource(candidate?.tokenSrc);
   if (!tokenSrc) throw new Error('PF2e Tokener candidate has no token image.');
 
   const scaleOverride = getScaleOverride(scale);
-  const scaleX = scaleOverride ?? numberOr(candidate?.scaleX ?? candidate?.scale, 1);
-  const scaleY = scaleOverride ?? numberOr(candidate?.scaleY ?? candidate?.scale, scaleX);
+  const ringScaleOverride = getScaleOverride(ringScale);
+  const baseScaleX = numberOr(candidate?.scaleX ?? candidate?.scale, 1);
+  const baseScaleY = numberOr(candidate?.scaleY ?? candidate?.scale, baseScaleX);
+  const scaleX = scaleOverride ?? baseScaleX;
+  const scaleY = scaleOverride ?? baseScaleY;
   const update = {
     'texture.src': tokenSrc,
     'texture.scaleX': scaleX,
@@ -95,7 +98,7 @@ export function buildTokenUpdate(candidate, { scale } = {}) {
     update['ring.enabled'] = true;
     update['ring.subject.texture'] = candidate.subjectSrc;
     update['ring.subject.scale'] =
-      scaleOverride ??
+      ringScaleOverride ??
       numberOr(candidate.subjectScale, Math.max(Math.abs(scaleX), Math.abs(scaleY)));
   } else {
     update['ring.enabled'] = false;
@@ -113,15 +116,29 @@ export function buildActorUpdate(candidate, options = {}) {
   return actorUpdate;
 }
 
-export function buildTokenScalePreviewUpdate(candidate, scale) {
+export function buildTokenScalePreviewUpdate(
+  candidate,
+  scale,
+  tokenDocument,
+  { target = 'token' } = {},
+) {
   const scaleOverride = getScaleOverride(scale);
   if (scaleOverride === null) return {};
-  const update = {
+  if (target === 'ring') {
+    return hasDynamicRingSubjectScaleTarget(candidate, tokenDocument)
+      ? { 'ring.subject.scale': scaleOverride }
+      : {};
+  }
+  return {
     'texture.scaleX': scaleOverride,
     'texture.scaleY': scaleOverride,
   };
-  if (candidate?.subjectSrc) update['ring.subject.scale'] = scaleOverride;
-  return update;
+}
+
+function hasDynamicRingSubjectScaleTarget(candidate, tokenDocument) {
+  return Boolean(
+    candidate?.subjectSrc || readDocumentPath(tokenDocument, 'ring.subject.texture'),
+  );
 }
 
 export function buildRevertSnapshot({ action, candidate, tokenDocument } = {}) {

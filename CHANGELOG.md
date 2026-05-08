@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+## 1.0.7 - 2026-05-08
+
 ### New
 
-- Added per-card token scale sliders with live selected-token preview.
+- Added separate per-card token scale and dynamic ring scale sliders with live selected-token preview.
+- Added reset buttons for both scale sliders.
+
+### Improved
+
+- The dynamic ring scale slider only appears for token art that uses a dynamic ring subject.
+- Removed scale slider hover tooltips so they no longer cover the slider value text.
 
 ## 1.0.6 - 2026-05-07
 

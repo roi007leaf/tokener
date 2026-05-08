@@ -1811,15 +1811,20 @@ test('picker template renders edit tags for all indexed image cards', () => {
   assert.match(template, /data-custom-image-tags-candidate-id=['"]{{viewId}}['"]/);
 });
 
-test('picker template renders per-card token scale slider controls', () => {
+test('picker template renders per-card token and dynamic ring scale slider controls', () => {
   const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
   const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
 
-  assert.match(template, /{{#if scaleControl}}/);
+  assert.match(template, /{{#if hasScaleControls}}/);
+  assert.match(template, /{{#each scaleControls}}/);
   assert.match(template, /class=['"]pf2e-tokener-scale-slider['"]/);
-  assert.match(template, /data-scale-value/);
+  assert.match(template, /data-scale-target=['"]{{target}}['"]/);
+  assert.match(template, /data-scale-value=['"]{{target}}['"]/);
+  assert.match(template, /data-scale-reset=['"]{{target}}['"]/);
+  assert.doesNotMatch(template, /pf2e-tokener-scale-slider[\s\S]{0,500}data-tooltip/);
   assert.match(css, /\.pf2e-tokener-scale-control\s*\{/);
   assert.match(css, /\.pf2e-tokener-scale-slider\s*\{/);
+  assert.match(css, /\.pf2e-tokener-scale-reset\s*\{/);
 });
 
 test('custom image tag dialog shows selected tags and supports chip removal', () => {
@@ -1874,8 +1879,17 @@ test('token scale slider previews scene token scale and reuses preview revert sn
   assert.match(picker, /_scalePreviewSnapshots/);
   assert.match(picker, /buildApplyRevertSnapshot/);
   assert.match(picker, /closestTarget\(target, '.pf2e-tokener-scale-control'\)/);
-  assert.match(picker, /buildTokenUpdate\(candidate, \{ scale/);
-  assert.match(picker, /buildActorUpdate\(candidate, \{ scale/);
+  assert.match(picker, /SCALE_TARGET_TOKEN/);
+  assert.match(picker, /SCALE_TARGET_RING/);
+  assert.match(picker, /function hasDynamicRingScaleControl\(candidate\)/);
+  assert.doesNotMatch(
+    picker,
+    /function hasDynamicRingScaleControl[\s\S]*readDocumentValue\(tokenDocument, 'ring\.subject\.texture'\)/,
+  );
+  assert.match(picker, /handleScaleResetClick/);
+  assert.match(picker, /dataScaleReset/);
+  assert.match(picker, /buildTokenUpdate\(candidate, \{ scale, ringScale \}\)/);
+  assert.match(picker, /buildActorUpdate\(candidate, \{ scale, ringScale \}\)/);
 });
 
 test('favorite candidate helper toggles ids and filters candidates', async () => {
@@ -1928,7 +1942,7 @@ test('token update preserves dynamic ring fields when subject art exists', () =>
   });
 });
 
-test('token update applies linked scale override to token and dynamic subject', () => {
+test('token update applies separate token and dynamic ring scale overrides', () => {
   const update = buildTokenUpdate(
     {
       tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
@@ -1937,15 +1951,30 @@ test('token update applies linked scale override to token and dynamic subject', 
       scaleY: 2,
       subjectScale: 2,
     },
+    { scale: 1.35, ringScale: 0.85 },
+  );
+
+  assert.equal(update['texture.scaleX'], 1.35);
+  assert.equal(update['texture.scaleY'], 1.35);
+  assert.equal(update['ring.subject.scale'], 0.85);
+});
+
+test('token update applies linked scale override to normal token scale', () => {
+  const update = buildTokenUpdate(
+    {
+      tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+      scaleX: 2,
+      scaleY: 2,
+    },
     { scale: 1.35 },
   );
 
   assert.equal(update['texture.scaleX'], 1.35);
   assert.equal(update['texture.scaleY'], 1.35);
-  assert.equal(update['ring.subject.scale'], 1.35);
+  assert.equal(update['ring.enabled'], false);
 });
 
-test('actor update applies linked scale override to prototype token fields', () => {
+test('actor update applies separate token and dynamic ring scale overrides', () => {
   const update = buildActorUpdate(
     {
       tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
@@ -1955,12 +1984,12 @@ test('actor update applies linked scale override to prototype token fields', () 
       scaleY: 2,
       subjectScale: 2,
     },
-    { scale: 0.85 },
+    { scale: 0.85, ringScale: 1.4 },
   );
 
   assert.equal(update['prototypeToken.texture.scaleX'], 0.85);
   assert.equal(update['prototypeToken.texture.scaleY'], 0.85);
-  assert.equal(update['prototypeToken.ring.subject.scale'], 0.85);
+  assert.equal(update['prototypeToken.ring.subject.scale'], 1.4);
 });
 
 test('invalid linked scale override falls back to candidate scale', () => {
@@ -1980,7 +2009,22 @@ test('invalid linked scale override falls back to candidate scale', () => {
   assert.equal(update['ring.subject.scale'], 1.4);
 });
 
-test('token scale preview update changes selected token scale only', () => {
+test('token scale preview update changes selected normal token scale only', () => {
+  assert.deepEqual(
+    buildTokenScalePreviewUpdate(
+      {
+        tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+      },
+      1.45,
+    ),
+    {
+      'texture.scaleX': 1.45,
+      'texture.scaleY': 1.45,
+    },
+  );
+});
+
+test('token scale preview update changes candidate dynamic token scale only for token target', () => {
   assert.deepEqual(
     buildTokenScalePreviewUpdate(
       {
@@ -1988,12 +2032,68 @@ test('token scale preview update changes selected token scale only', () => {
         subjectSrc: 'modules/pkg/assets/subjects/dragon.webp',
       },
       1.45,
+      undefined,
+      { target: 'token' },
     ),
     {
       'texture.scaleX': 1.45,
       'texture.scaleY': 1.45,
+    },
+  );
+});
+
+test('token scale preview update changes candidate dynamic ring scale only for ring target', () => {
+  assert.deepEqual(
+    buildTokenScalePreviewUpdate(
+      {
+        tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+        subjectSrc: 'modules/pkg/assets/subjects/dragon.webp',
+      },
+      1.45,
+      undefined,
+      { target: 'ring' },
+    ),
+    {
       'ring.subject.scale': 1.45,
     },
+  );
+});
+
+test('token scale preview update changes existing dynamic subject scale without candidate subject art', () => {
+  assert.deepEqual(
+    buildTokenScalePreviewUpdate(
+      {
+        tokenSrc: 'modules/pkg/assets/tokens/dragon-ring.webp',
+      },
+      0.8,
+      {
+        ring: {
+          enabled: true,
+          subject: {
+            texture: 'modules/pkg/assets/subjects/current-dragon.webp',
+            scale: 1.4,
+          },
+        },
+      },
+      { target: 'ring' },
+    ),
+    {
+      'ring.subject.scale': 0.8,
+    },
+  );
+});
+
+test('token scale preview update skips dynamic ring target when no ring is used', () => {
+  assert.deepEqual(
+    buildTokenScalePreviewUpdate(
+      {
+        tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+      },
+      0.8,
+      undefined,
+      { target: 'ring' },
+    ),
+    {},
   );
 });
 
@@ -2708,6 +2808,13 @@ test('English localization file contains Token HUD strings', () => {
   assert.equal(translations['PF2ETokener.HUD.BestMatches'], 'Best matches');
   assert.equal(translations['PF2ETokener.HUD.SearchResults'], 'Search results');
   assert.equal(translations['PF2ETokener.HUD.Current'], 'Current');
+  assert.equal(translations['PF2ETokener.HUD.RingScale'], 'Ring');
+  assert.equal(
+    translations['PF2ETokener.HUD.RingScaleTooltip'],
+    'Preview dynamic ring scale. Lower values make the ring larger.',
+  );
+  assert.equal(translations['PF2ETokener.HUD.ResetScale'], 'Reset scale');
+  assert.equal(translations['PF2ETokener.HUD.ResetRingScale'], 'Reset ring scale');
   assert.equal(translations['PF2ETokener.HUD.RevertLast'], 'Revert last');
   assert.equal(
     translations['PF2ETokener.HUD.RevertTooltip'],

@@ -43,6 +43,8 @@ const PICKER_TEMPLATE = 'modules/pf2e-tokener/templates/picker.hbs';
 const SCALE_MIN = 0.25;
 const SCALE_MAX = 3;
 const SCALE_STEP = 0.05;
+const SCALE_TARGET_TOKEN = 'token';
+const SCALE_TARGET_RING = 'ring';
 
 let activePicker = null;
 let TokenPickerApplicationBase = null;
@@ -327,6 +329,14 @@ function handlePickerInput(app, event) {
 
 async function handlePickerClick(app, event) {
   const target = event.target;
+  const scaleReset = closestTarget(target, '[data-scale-reset]');
+  if (scaleReset) {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    handleScaleResetClick(app, scaleReset);
+    return;
+  }
+
   if (closestTarget(target, '.pf2e-tokener-scale-control')) {
     event.stopPropagation?.();
     return;
@@ -619,26 +629,67 @@ function handleScaleSliderInput(app, input) {
   const candidate = app?._candidateMap?.get(card?.dataset?.candidateId);
   if (!card || !candidate) return;
 
-  const scale = readCardScaleValue(card, candidate);
-  updateCardScaleValue(card, scale);
+  const target = getScaleTarget(input);
+  const scale = readCardScaleValue(card, candidate, target, app.tokenDocument);
+  updateCardScaleValue(card, target, scale);
   ensureScalePreviewSnapshot(app, card, candidate);
-  scheduleScalePreviewUpdate(app, candidate, scale, card.dataset.candidateId);
+  scheduleScalePreviewUpdate(app, candidate, scale, card.dataset.candidateId, target);
 }
 
-function readCardScaleValue(card, candidate) {
-  const input = card?.querySelector?.('.pf2e-tokener-scale-slider');
+function handleScaleResetClick(app, button) {
+  const card = closestTarget(button, '.pf2e-tokener-card');
+  const candidate = app?._candidateMap?.get(card?.dataset?.candidateId);
+  if (!card || !candidate) return;
+
+  const dataScaleReset = button?.dataset?.scaleReset;
+  const target = dataScaleReset === SCALE_TARGET_RING ? SCALE_TARGET_RING : SCALE_TARGET_TOKEN;
+  const scale = readCardScaleDefaultValue(card, candidate, target, app.tokenDocument);
+  updateCardScaleValue(card, target, scale);
+  ensureScalePreviewSnapshot(app, card, candidate);
+  scheduleScalePreviewUpdate(app, candidate, scale, card.dataset.candidateId, target);
+}
+
+function readCardScaleValue(card, candidate, target = SCALE_TARGET_TOKEN, tokenDocument) {
+  const input = getScaleInput(card, target);
   return Number(
     formatScaleValue(
-      input?.value ?? input?.dataset?.scaleDefault ?? getCandidateLinkedScale(candidate),
+      input?.value ??
+        input?.dataset?.scaleDefault ??
+        getDefaultScaleValue(candidate, target, tokenDocument),
     ),
   );
 }
 
-function updateCardScaleValue(card, scale) {
+function readCardScaleDefaultValue(card, candidate, target, tokenDocument) {
+  const input = getScaleInput(card, target);
+  return Number(
+    formatScaleValue(
+      input?.dataset?.scaleDefault ?? getDefaultScaleValue(candidate, target, tokenDocument),
+    ),
+  );
+}
+
+function getScaleInput(card, target) {
+  return card?.querySelector?.(`.pf2e-tokener-scale-slider[data-scale-target="${target}"]`);
+}
+
+function getScaleTarget(input) {
+  return input?.dataset?.scaleTarget === SCALE_TARGET_RING
+    ? SCALE_TARGET_RING
+    : SCALE_TARGET_TOKEN;
+}
+
+function getDefaultScaleValue(candidate, target, tokenDocument) {
+  return target === SCALE_TARGET_RING
+    ? getCandidateDynamicRingScale(candidate, tokenDocument)
+    : getCandidateLinkedScale(candidate);
+}
+
+function updateCardScaleValue(card, target, scale) {
   const value = formatScaleValue(scale);
-  const input = card?.querySelector?.('.pf2e-tokener-scale-slider');
+  const input = getScaleInput(card, target);
   if (input) input.value = value;
-  const display = card?.querySelector?.('[data-scale-value]');
+  const display = card?.querySelector?.(`[data-scale-value="${target}"]`);
   if (display) display.textContent = `${value}x`;
 }
 
@@ -653,9 +704,14 @@ function ensureScalePreviewSnapshot(app, card, candidate) {
   );
 }
 
-function scheduleScalePreviewUpdate(app, candidate, scale, candidateId) {
+function scheduleScalePreviewUpdate(app, candidate, scale, candidateId, target) {
   if (!app?.tokenDocument?.update) return;
-  app._pendingScalePreview = { candidate, candidateId, scale };
+  const pendingScales =
+    app._pendingScalePreview?.candidateId === candidateId
+      ? { ...app._pendingScalePreview.scales }
+      : {};
+  pendingScales[target] = scale;
+  app._pendingScalePreview = { candidate, candidateId, scales: pendingScales };
   if (app._scalePreviewScheduled) return;
 
   app._scalePreviewScheduled = true;
@@ -671,7 +727,7 @@ async function flushScalePreviewUpdate(app) {
   app._scalePreviewScheduled = false;
   if (!pending) return;
 
-  const update = buildTokenScalePreviewUpdate(pending.candidate, pending.scale);
+  const update = buildScalePreviewUpdate(pending, app.tokenDocument);
   if (!Object.keys(update).length || !app?.tokenDocument?.update) return;
 
   try {
@@ -683,6 +739,17 @@ async function flushScalePreviewUpdate(app) {
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to preview token scale`, error);
   }
+}
+
+function buildScalePreviewUpdate(pending, tokenDocument) {
+  const update = {};
+  for (const [target, scale] of Object.entries(pending?.scales ?? {})) {
+    Object.assign(
+      update,
+      buildTokenScalePreviewUpdate(pending.candidate, scale, tokenDocument, { target }),
+    );
+  }
+  return update;
 }
 
 function matchesTarget(target, selector) {
@@ -927,6 +994,9 @@ function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
   const hasPreview = Boolean(previewSrc);
   const isUnavailable = actions.length === 0;
   const favorite = isFavoriteCandidate(candidate, favoriteIds);
+  const scaleControls = hasTokenScaleAction(actions)
+    ? prepareScaleControlViews(candidate, app.tokenDocument)
+    : [];
   return {
     ...candidate,
     actions,
@@ -952,7 +1022,8 @@ function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
     previewSrc: previewSrc,
     cardTooltip: getCandidateCardTooltip(candidate),
     imageTagsTooltip: localize('HUD.EditCustomImageTags', 'Edit image tags'),
-    scaleControl: hasTokenScaleAction(actions) ? prepareScaleControlView(candidate) : null,
+    hasScaleControls: scaleControls.length > 0,
+    scaleControls,
     tabIndex: isUnavailable ? '-1' : '0',
     viewId,
   };
@@ -964,17 +1035,46 @@ function hasTokenScaleAction(actions) {
   );
 }
 
-function prepareScaleControlView(candidate) {
-  const value = formatScaleValue(getCandidateLinkedScale(candidate));
+function prepareScaleControlViews(candidate, tokenDocument) {
+  const controls = [
+    prepareScaleControlView(SCALE_TARGET_TOKEN, getCandidateLinkedScale(candidate)),
+  ];
+  if (hasDynamicRingScaleControl(candidate)) {
+    controls.push(
+      prepareScaleControlView(
+        SCALE_TARGET_RING,
+        getCandidateDynamicRingScale(candidate, tokenDocument),
+      ),
+    );
+  }
+  return controls;
+}
+
+function prepareScaleControlView(target, scale) {
+  const value = formatScaleValue(scale);
+  const ring = target === SCALE_TARGET_RING;
   return {
-    label: localize('HUD.Scale', 'Scale'),
+    label: ring ? localize('HUD.RingScale', 'Ring') : localize('HUD.Scale', 'Scale'),
     max: SCALE_MAX,
     min: SCALE_MIN,
+    resetLabel: ring
+      ? localize('HUD.ResetRingScale', 'Reset ring scale')
+      : localize('HUD.ResetScale', 'Reset scale'),
     step: SCALE_STEP,
-    tooltip: localize('HUD.ScaleTooltip', 'Preview token scale'),
+    target,
+    tooltip: ring
+      ? localize(
+          'HUD.RingScaleTooltip',
+          'Preview dynamic ring scale. Lower values make the ring larger.',
+        )
+      : localize('HUD.ScaleTooltip', 'Preview token scale'),
     value,
     valueLabel: `${value}x`,
   };
+}
+
+function hasDynamicRingScaleControl(candidate) {
+  return Boolean(candidate?.subjectSrc);
 }
 
 function getCandidateLinkedScale(candidate) {
@@ -982,6 +1082,26 @@ function getCandidateLinkedScale(candidate) {
   const scaleY = Number(candidate?.scaleY ?? candidate?.scale ?? scaleX);
   const scale = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : scaleY;
   return clampScaleValue(scale);
+}
+
+function getCandidateDynamicRingScale(candidate, tokenDocument) {
+  return clampScaleValue(
+    candidate?.subjectScale ?? readDocumentValue(tokenDocument, 'ring.subject.scale') ?? 1,
+  );
+}
+
+function readDocumentValue(documentLike, path) {
+  return (
+    documentLike?.get?.(path) ??
+    readObjectPath(documentLike, path) ??
+    readObjectPath(documentLike?._source, path)
+  );
+}
+
+function readObjectPath(object, path) {
+  return String(path)
+    .split('.')
+    .reduce((value, part) => value?.[part], object);
 }
 
 function clampScaleValue(value) {
@@ -1343,21 +1463,22 @@ async function applyCandidateAction(action, candidate, tokenDocument, card, app 
   if (!availableAction) return;
 
   const targets = getApplyTargets(action);
-  const scale = readCardScaleValue(card, candidate);
+  const scale = readCardScaleValue(card, candidate, SCALE_TARGET_TOKEN, tokenDocument);
+  const ringScale = readCardScaleValue(card, candidate, SCALE_TARGET_RING, tokenDocument);
   const revertSnapshot = buildApplyRevertSnapshot(app, action, candidate, tokenDocument, card);
   card?.classList.add('is-applying');
 
   try {
     if (targets.token) {
       await tokenDocument.update({
-        ...buildTokenUpdate(candidate, { scale }),
+        ...buildTokenUpdate(candidate, { scale, ringScale }),
         [REVERT_FLAG_PATH]: revertSnapshot,
       });
     }
 
     if (targets.actor && actor) {
       await actor.update({
-        ...buildActorUpdate(candidate, { scale }),
+        ...buildActorUpdate(candidate, { scale, ringScale }),
         [REVERT_FLAG_PATH]: revertSnapshot,
       });
     }
