@@ -86,6 +86,12 @@ export {
   normalizeHudElement,
   setTextTooltip,
 } from './utils.js';
+export {
+  getCurrentSystemId,
+  getCurrentSystemProfile,
+  getSystemProfile,
+  normalizeSystemPackKey,
+} from './system-profile.js';
 
 function registerFoundryIntegration() {
   const hooks = globalThis.Hooks;
@@ -99,7 +105,6 @@ function registerFoundryIntegration() {
 
   hooks.once('ready', async () => {
     installApi();
-    if (globalThis.game?.system?.id !== 'pf2e') return;
     await rebuildIndex();
     hooks.on('renderTokenHUD', renderTokenHud);
     hooks.on('canvasPan', updateOpenPanelsCanvasZoom);

@@ -8,7 +8,7 @@ let memoryFavorites = { ids: [] };
 export function registerFavoriteSettings(settings = globalThis.game?.settings) {
   settings?.register?.(MODULE_ID, FAVORITES_SETTING_KEY, {
     name: localize('Settings.Favorites.Name', 'Favorite token art'),
-    hint: localize('Settings.Favorites.Hint', 'Token art marked as favorites in PF2e Tokener.'),
+    hint: localize('Settings.Favorites.Hint', 'Token art marked as favorites in Tokener.'),
     scope: 'client',
     config: false,
     type: Object,
@@ -61,9 +61,7 @@ function normalizeFavoriteIds(store) {
   const ids = Array.isArray(store) ? store : isObject(store) ? store.ids : [];
   return [
     ...new Set(
-      (Array.isArray(ids) ? ids : [])
-        .map((id) => String(id ?? '').trim())
-        .filter(Boolean),
+      (Array.isArray(ids) ? ids : []).map((id) => String(id ?? '').trim()).filter(Boolean),
     ),
   ];
 }

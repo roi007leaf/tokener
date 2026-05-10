@@ -10,8 +10,14 @@ import {
   numberOr,
   splitTerms,
 } from './utils.js';
+import { getCurrentSystemId, normalizeSystemPackKey } from './system-profile.js';
 
-export function createMappedCandidates({ module, mapping, sourceType = 'native' }) {
+export function createMappedCandidates({
+  module,
+  mapping,
+  sourceType = 'native',
+  systemId = getCurrentSystemId(),
+}) {
   if (!isObject(mapping)) return [];
 
   const candidates = [];
@@ -31,6 +37,7 @@ export function createMappedCandidates({ module, mapping, sourceType = 'native' 
           packKey,
           portraitSrc,
           sourceType,
+          systemId,
           ...token,
         }),
       );
@@ -310,10 +317,11 @@ function makeCandidate({
   sourceType,
   subjectScale,
   subjectSrc,
+  systemId,
   tags,
   tokenSrc,
 }) {
-  const normalizedPackKey = packKey ? normalizePackKey(packKey) : undefined;
+  const normalizedPackKey = packKey ? normalizePackKey(packKey, systemId) : undefined;
   const normalizedTokenSrc = normalizePath(tokenSrc);
   const normalizedPortraitSrc = normalizePath(portraitSrc);
   const normalizedSubjectSrc = normalizePath(subjectSrc);
@@ -534,27 +542,23 @@ function getActorSourceIds(actor) {
   return [...values].map(parseCompendiumSource).filter(Boolean);
 }
 
-function parseCompendiumSource(sourceId) {
+function parseCompendiumSource(sourceId, systemId = getCurrentSystemId()) {
   const stripped = String(sourceId).replace(/^Compendium\./, '');
   const marker = '.Actor.';
   if (stripped.includes(marker)) {
     const [packKey, actorId] = stripped.split(marker);
-    return { actorId, canonicalPackKey: normalizePackKey(packKey), packKey };
+    return { actorId, canonicalPackKey: normalizePackKey(packKey, systemId), packKey };
   }
 
   const parts = stripped.split('.');
   const actorId = parts.pop();
   const packKey = parts.join('.');
   if (!actorId || !packKey) return null;
-  return { actorId, canonicalPackKey: normalizePackKey(packKey), packKey };
+  return { actorId, canonicalPackKey: normalizePackKey(packKey, systemId), packKey };
 }
 
-function normalizePackKey(packKey) {
-  const key = String(packKey ?? '').trim();
-  if (!key) return '';
-  if (key.startsWith('pf2e.')) return key;
-  if (!key.includes('.')) return `pf2e.${key}`;
-  return key;
+function normalizePackKey(packKey, systemId = getCurrentSystemId()) {
+  return normalizeSystemPackKey(packKey, { systemId });
 }
 
 function isExactSourceMatch(candidate, source) {

@@ -1,4 +1,5 @@
 import { MODULE_ID } from './constants.js';
+import { getCurrentSystemProfile } from './system-profile.js';
 import { getDocumentActor, isObject, localize, normalizePath, numberOr } from './utils.js';
 
 export const REVERT_FLAG_KEY = 'lastRevert';
@@ -77,10 +78,11 @@ export function getApplyTargets(action) {
   }
 }
 
-export function buildTokenUpdate(candidate, { scale, ringScale } = {}) {
+export function buildTokenUpdate(candidate, { scale, ringScale, profile } = {}) {
   const tokenSrc = getImageSource(candidate?.tokenSrc);
-  if (!tokenSrc) throw new Error('PF2e Tokener candidate has no token image.');
+  if (!tokenSrc) throw new Error('Tokener candidate has no token image.');
 
+  const systemProfile = resolveSystemProfile(profile);
   const scaleOverride = getScaleOverride(scale);
   const ringScaleOverride = getScaleOverride(ringScale);
   const baseScaleX = numberOr(candidate?.scaleX ?? candidate?.scale, 1);
@@ -93,6 +95,8 @@ export function buildTokenUpdate(candidate, { scale, ringScale } = {}) {
     'texture.scaleY': scaleY,
     randomImg: false,
   };
+
+  if (!supportsDynamicTokenRing(systemProfile)) return update;
 
   if (candidate?.subjectSrc) {
     update['ring.enabled'] = true;
@@ -108,11 +112,17 @@ export function buildTokenUpdate(candidate, { scale, ringScale } = {}) {
 }
 
 export function buildActorUpdate(candidate, options = {}) {
+  const profile = resolveSystemProfile(options.profile);
   const actorUpdate = {};
-  for (const [key, value] of Object.entries(buildTokenUpdate(candidate, options))) {
-    actorUpdate[`prototypeToken.${key}`] = value;
+  if (profile.supportsPrototypeToken !== false) {
+    for (const [key, value] of Object.entries(
+      buildTokenUpdate(candidate, { ...options, profile }),
+    )) {
+      actorUpdate[`prototypeToken.${key}`] = value;
+    }
   }
-  if (candidate?.portraitSrc) actorUpdate.img = candidate.portraitSrc;
+  if (profile.supportsActorPortrait !== false && candidate?.portraitSrc)
+    actorUpdate.img = candidate.portraitSrc;
   return actorUpdate;
 }
 
@@ -120,12 +130,13 @@ export function buildTokenScalePreviewUpdate(
   candidate,
   scale,
   tokenDocument,
-  { target = 'token' } = {},
+  { target = 'token', profile } = {},
 ) {
   const scaleOverride = getScaleOverride(scale);
   if (scaleOverride === null) return {};
   if (target === 'ring') {
-    return hasDynamicRingSubjectScaleTarget(candidate, tokenDocument)
+    return supportsDynamicTokenRing(resolveSystemProfile(profile)) &&
+      hasDynamicRingSubjectScaleTarget(candidate, tokenDocument)
       ? { 'ring.subject.scale': scaleOverride }
       : {};
   }
@@ -136,23 +147,26 @@ export function buildTokenScalePreviewUpdate(
 }
 
 function hasDynamicRingSubjectScaleTarget(candidate, tokenDocument) {
-  return Boolean(
-    candidate?.subjectSrc || readDocumentPath(tokenDocument, 'ring.subject.texture'),
-  );
+  return Boolean(candidate?.subjectSrc || readDocumentPath(tokenDocument, 'ring.subject.texture'));
 }
 
-export function buildRevertSnapshot({ action, candidate, tokenDocument } = {}) {
+export function buildRevertSnapshot({ action, candidate, tokenDocument, profile } = {}) {
+  const systemProfile = resolveSystemProfile(profile);
   const actor = getDocumentActor(tokenDocument);
   const targets = getApplyTargets(action);
-  const actorUpdate = targets.actor && candidate ? buildActorUpdate(candidate) : {};
+  const actorUpdate =
+    targets.actor && candidate ? buildActorUpdate(candidate, { profile: systemProfile }) : {};
   const changesPortrait =
     targets.portrait || Object.prototype.hasOwnProperty.call(actorUpdate, 'img');
   return {
     action,
     label: candidate?.label ?? '',
     time: Date.now(),
-    token: targets.token ? captureTokenState(tokenDocument) : undefined,
-    actor: targets.actor && actor ? captureTokenState(actor.prototypeToken) : undefined,
+    token: targets.token ? captureTokenState(tokenDocument, systemProfile) : undefined,
+    actor:
+      targets.actor && actor && systemProfile.supportsPrototypeToken !== false
+        ? captureTokenState(actor.prototypeToken, systemProfile)
+        : undefined,
     portrait: changesPortrait && actor ? { img: actor.img ?? actor._source?.img ?? '' } : undefined,
   };
 }
@@ -169,19 +183,21 @@ export function getLastRevertData(tokenDocument) {
   return tokenSnapshot ?? actorSnapshot ?? null;
 }
 
-export function buildTokenRevertUpdate(snapshot) {
+export function buildTokenRevertUpdate(snapshot, { profile } = {}) {
   if (!isObject(snapshot?.token)) return {};
-  return tokenStateToUpdate(snapshot.token);
+  return tokenStateToUpdate(snapshot.token, resolveSystemProfile(profile));
 }
 
-export function buildActorRevertUpdate(snapshot) {
+export function buildActorRevertUpdate(snapshot, { profile } = {}) {
+  const systemProfile = resolveSystemProfile(profile);
   const update = {};
-  if (isObject(snapshot?.actor)) {
-    for (const [key, value] of Object.entries(tokenStateToUpdate(snapshot.actor))) {
+  if (isObject(snapshot?.actor) && systemProfile.supportsPrototypeToken !== false) {
+    for (const [key, value] of Object.entries(tokenStateToUpdate(snapshot.actor, systemProfile))) {
       update[`prototypeToken.${key}`] = value;
     }
   }
-  if (isObject(snapshot?.portrait)) update.img = snapshot.portrait.img ?? '';
+  if (isObject(snapshot?.portrait) && systemProfile.supportsActorPortrait !== false)
+    update.img = snapshot.portrait.img ?? '';
   return update;
 }
 
@@ -191,21 +207,22 @@ export function hasRevertTargets(snapshot) {
   );
 }
 
-export async function revertLastTokenerChange(tokenDocument) {
+export async function revertLastTokenerChange(tokenDocument, { profile } = {}) {
+  const systemProfile = resolveSystemProfile(profile);
   const actor = getDocumentActor(tokenDocument);
   const snapshot = getLastRevertData(tokenDocument);
   if (!hasRevertTargets(snapshot)) return false;
 
   if (snapshot.token && tokenDocument?.update) {
     await tokenDocument.update({
-      ...buildTokenRevertUpdate(snapshot),
+      ...buildTokenRevertUpdate(snapshot, { profile: systemProfile }),
       [REVERT_FLAG_PATH]: null,
     });
   }
 
   if ((snapshot.actor || snapshot.portrait) && actor?.update) {
     await actor.update({
-      ...buildActorRevertUpdate(snapshot),
+      ...buildActorRevertUpdate(snapshot, { profile: systemProfile }),
       [REVERT_FLAG_PATH]: null,
     });
   }
@@ -213,35 +230,41 @@ export async function revertLastTokenerChange(tokenDocument) {
   return true;
 }
 
-function captureTokenState(documentLike) {
-  return {
+function captureTokenState(documentLike, profile = resolveSystemProfile()) {
+  const state = {
     texture: {
       src: normalizePath(readDocumentPath(documentLike, 'texture.src')).trim(),
       scaleX: numberOr(readDocumentPath(documentLike, 'texture.scaleX'), 1),
       scaleY: numberOr(readDocumentPath(documentLike, 'texture.scaleY'), 1),
     },
     randomImg: Boolean(readDocumentPath(documentLike, 'randomImg')),
-    ring: {
+  };
+  if (supportsDynamicTokenRing(profile)) {
+    state.ring = {
       enabled: Boolean(readDocumentPath(documentLike, 'ring.enabled')),
       subject: {
         texture: normalizePath(readDocumentPath(documentLike, 'ring.subject.texture')).trim(),
         scale: numberOr(readDocumentPath(documentLike, 'ring.subject.scale'), 1),
       },
-    },
-  };
+    };
+  }
+  return state;
 }
 
-function tokenStateToUpdate(state) {
+function tokenStateToUpdate(state, profile = resolveSystemProfile()) {
   const subjectTexture = normalizePath(state?.ring?.subject?.texture).trim();
-  return {
+  const update = {
     'texture.src': normalizePath(state?.texture?.src).trim(),
     'texture.scaleX': numberOr(state?.texture?.scaleX, 1),
     'texture.scaleY': numberOr(state?.texture?.scaleY, 1),
     randomImg: Boolean(state?.randomImg),
-    'ring.enabled': Boolean(state?.ring?.enabled),
-    'ring.subject.texture': subjectTexture,
-    'ring.subject.scale': numberOr(state?.ring?.subject?.scale, 1),
   };
+  if (supportsDynamicTokenRing(profile)) {
+    update['ring.enabled'] = Boolean(state?.ring?.enabled);
+    update['ring.subject.texture'] = subjectTexture;
+    update['ring.subject.scale'] = numberOr(state?.ring?.subject?.scale, 1);
+  }
+  return update;
 }
 
 function readDocumentPath(documentLike, path) {
@@ -276,4 +299,12 @@ function hasImageSource(source) {
 function getScaleOverride(value) {
   const scale = Number(value);
   return Number.isFinite(scale) && scale > 0 ? scale : null;
+}
+
+function resolveSystemProfile(profile = getCurrentSystemProfile()) {
+  return profile ?? getCurrentSystemProfile();
+}
+
+function supportsDynamicTokenRing(profile) {
+  return profile?.supportsDynamicTokenRing !== false;
 }
