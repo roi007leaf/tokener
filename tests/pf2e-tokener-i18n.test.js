@@ -20,9 +20,9 @@ test('English localization file contains HUD/action/notification strings', () =>
     fs.readFileSync(path.join(process.cwd(), 'languages', 'en.json'), 'utf8'),
   );
 
-  expect(translations['PF2ETokener.HUD.Tooltip']).toBe('PF2e Tokener');
+  expect(translations['PF2ETokener.HUD.Tooltip']).toBe('Tokener');
   expect(translations['PF2ETokener.HUD.RevertButtonTooltip']).toBe(
-    'PF2e Tokener - right-click to revert last change.',
+    'Tokener - right-click to revert last change.',
   );
   expect(translations['PF2ETokener.HUD.SearchPlaceholder']).toBe('Search tokens');
   expect(translations['PF2ETokener.HUD.AllSources']).toBe('All sources');
@@ -42,9 +42,7 @@ test('English localization file contains HUD/action/notification strings', () =>
   expect(translations['PF2ETokener.Actions.Actor']).toBe('Actor');
   expect(translations['PF2ETokener.Actions.Portrait']).toBe('Portrait');
   expect(translations['PF2ETokener.Actions.Both']).toBe('Both');
-  expect(translations['PF2ETokener.Notifications.Applied']).toBe(
-    'PF2e Tokener: token art applied.',
-  );
+  expect(translations['PF2ETokener.Notifications.Applied']).toBe('Tokener: token art applied.');
 });
 
 test('localize uses Foundry i18n and falls back when unavailable', () => {

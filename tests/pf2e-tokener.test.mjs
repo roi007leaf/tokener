@@ -44,8 +44,10 @@ import {
   setCustomFolderImageTags,
   getCandidatesForTokenDocument,
   getPickerCandidatePool,
+  getSystemProfile,
   localize,
   normalizeHudElement,
+  normalizeSystemPackKey,
   registerCustomFolderSettings,
   registerFavoriteSettings,
   renderTokenHud,
@@ -150,6 +152,52 @@ test('native compendiumArtMappings become searchable token candidates', () => {
       sourceType: 'native',
     },
   );
+});
+
+test('system profiles use current system mappings without PF2e legacy flags by default', () => {
+  const profile = getSystemProfile('dnd5e');
+
+  assert.equal(profile.id, 'dnd5e');
+  assert.deepEqual(profile.nativeMappingKeys, ['dnd5e']);
+  assert.deepEqual(profile.legacyMappingFlagKeys, []);
+  assert.equal(normalizeSystemPackKey('monsters', { systemId: 'dnd5e' }), 'dnd5e.monsters');
+});
+
+test('mapped candidate exact matches use the active system pack prefix', () => {
+  const previousGame = globalThis.game;
+  globalThis.game = { system: { id: 'dnd5e' } };
+
+  try {
+    const candidates = createMappedCandidates({
+      module: { id: 'dnd5e-token-pack', title: 'DND5E Token Pack' },
+      mapping: {
+        monsters: {
+          adultBlueDragon: {
+            name: 'Adult Blue Dragon',
+            token: 'modules/dnd5e-token-pack/tokens/adult-blue-dragon.webp',
+          },
+        },
+      },
+    });
+
+    assert.equal(candidates[0].canonicalPackKey, 'dnd5e.monsters');
+    assert.deepEqual(
+      getCandidatesForTokenDocument(candidates, {
+        actor: {
+          name: 'Adult Blue Dragon',
+          flags: {
+            core: {
+              sourceId: 'Compendium.dnd5e.monsters.Actor.adultBlueDragon',
+            },
+          },
+        },
+      }).map((candidate) => candidate.matchType),
+      ['exact'],
+    );
+  } finally {
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+  }
 });
 
 test('old pf2e-art string and object token shapes normalize to candidates', () => {
@@ -622,6 +670,75 @@ test('Foundry index discovers datasheet tags from token module datasheet folders
           call.target === 'modules/pf2e-tokens-extra/assets/datasheet' && call.recursive === true,
       ),
     );
+  } finally {
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    state.index = [];
+    state.errors = [];
+    state.indexing = null;
+  }
+});
+
+test('Foundry index reads native compendium art mappings for the active system', async () => {
+  const previousGame = globalThis.game;
+  const previousFoundry = globalThis.foundry;
+  state.index = [];
+  state.errors = [];
+  state.indexing = null;
+
+  globalThis.game = {
+    system: { id: 'dnd5e' },
+    modules: new Map([
+      [
+        'dnd5e-token-pack',
+        {
+          id: 'dnd5e-token-pack',
+          title: 'DND5E Token Pack',
+          flags: {
+            compendiumArtMappings: {
+              dnd5e: {
+                mapping: 'modules/dnd5e-token-pack/mapping.json',
+              },
+            },
+          },
+        },
+      ],
+    ]),
+  };
+  globalThis.foundry = {
+    applications: {
+      apps: {
+        FilePicker: {
+          implementation: {
+            browse: async () => ({ files: [] }),
+          },
+        },
+      },
+    },
+    utils: {
+      fetchJsonWithTimeout: async (path) => {
+        assert.equal(path, 'modules/dnd5e-token-pack/mapping.json');
+        return {
+          monsters: {
+            adultBlueDragon: {
+              name: 'Adult Blue Dragon',
+              token: 'modules/dnd5e-token-pack/tokens/adult-blue-dragon.webp',
+            },
+          },
+        };
+      },
+    },
+  };
+
+  try {
+    const index = await rebuildIndex();
+
+    assert.equal(index.length, 1);
+    assert.equal(index[0].label, 'Adult Blue Dragon');
+    assert.equal(index[0].canonicalPackKey, 'dnd5e.monsters');
+    assert.equal(index[0].sourceType, 'native');
   } finally {
     if (previousGame === undefined) delete globalThis.game;
     else globalThis.game = previousGame;
@@ -1228,6 +1345,56 @@ test('source-only picker filtering browses all matching art with a render cap', 
   assert.equal(result.candidates.length, 120);
   assert.equal(result.hasMore, true);
   assert.ok(result.candidates.every((candidate) => candidate.moduleId === 'source-a'));
+});
+
+test('picker falls back to browsing all indexed art when the current token has no matches', () => {
+  const index = [
+    {
+      id: 'dnd-a',
+      label: 'Skeleton Warrior',
+      moduleId: 'dnd-tokens',
+      moduleTitle: 'DND Tokens',
+      tokenSrc: 'modules/dnd-tokens/tokens/skeleton-warrior.webp',
+      searchText: 'skeleton warrior dnd tokens dnd-tokens',
+    },
+    {
+      id: 'dnd-b',
+      label: 'Zombie Brute',
+      moduleId: 'dnd-tokens',
+      moduleTitle: 'DND Tokens',
+      tokenSrc: 'modules/dnd-tokens/tokens/zombie-brute.webp',
+      searchText: 'zombie brute dnd tokens dnd-tokens',
+    },
+  ];
+  const sourceOptions = getPanelSourceFilterOptions(index);
+  const result = getPickerCandidatePool(
+    index,
+    {
+      excludedTagIds: new Set(),
+      favoritesOnly: false,
+      resultLimit: 120,
+      searchQuery: '',
+      selectedSourceIds: new Set(['dnd-tokens']),
+      selectedTagIds: new Set(),
+      tokenDocument: {
+        actor: {
+          name: 'Guard Captain',
+          flags: { core: { sourceId: 'Compendium.dnd5e.monsters.Actor.guardCaptain' } },
+        },
+      },
+    },
+    {
+      favoriteIds: new Set(),
+      sourceOptions,
+    },
+  );
+
+  assert.equal(result.browseMode, true);
+  assert.equal(result.total, 2);
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.id),
+    ['dnd-a', 'dnd-b'],
+  );
 });
 
 test('source filter accepts multiple selected modules and can treat empty as none for HUD clear all', () => {
@@ -2111,6 +2278,45 @@ test('token update disables dynamic ring when no subject art exists', () => {
   });
 });
 
+test('token and revert updates omit dynamic ring fields when the system profile disables rings', () => {
+  const profile = { supportsDynamicTokenRing: false };
+
+  assert.deepEqual(
+    buildTokenUpdate(
+      {
+        label: 'Dragon',
+        tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
+        subjectSrc: 'modules/pkg/assets/subjects/dragon.webp',
+      },
+      { profile },
+    ),
+    {
+      'texture.src': 'modules/pkg/assets/tokens/dragon.webp',
+      'texture.scaleX': 1,
+      'texture.scaleY': 1,
+      randomImg: false,
+    },
+  );
+  assert.deepEqual(
+    buildTokenRevertUpdate(
+      {
+        token: {
+          texture: { src: 'old-token.webp', scaleX: 1.2, scaleY: 1.3 },
+          randomImg: false,
+          ring: { enabled: true, subject: { texture: 'old-subject.webp', scale: 1.4 } },
+        },
+      },
+      { profile },
+    ),
+    {
+      'texture.src': 'old-token.webp',
+      'texture.scaleX': 1.2,
+      'texture.scaleY': 1.3,
+      randomImg: false,
+    },
+  );
+});
+
 test('actor update writes prototype token fields and portrait only', () => {
   const update = buildActorUpdate({
     tokenSrc: 'modules/pkg/assets/tokens/dragon.webp',
@@ -2495,7 +2701,7 @@ test('Token HUD button highlights when Tokener override can be reverted', () => 
     const button = target.children.find((child) => child.className.includes('pf2e-tokener-button'));
 
     assert.match(button.className, /is-overridden/);
-    assert.equal(button.dataset.tooltip, 'PF2e Tokener - right-click to revert last change.');
+    assert.equal(button.dataset.tooltip, 'Tokener - right-click to revert last change.');
   } finally {
     globalThis.document = previousDocument;
     globalThis.game = previousGame;
@@ -2585,9 +2791,9 @@ test('right-clicking active Token HUD button reverts last Tokener change', async
         [REVERT_FLAG_PATH]: null,
       },
     ]);
-    assert.deepEqual(messages, ['PF2e Tokener: previous art restored.']);
+    assert.deepEqual(messages, ['Tokener: previous art restored.']);
     assert.doesNotMatch(button.className, /is-overridden/);
-    assert.equal(button.dataset.tooltip, 'PF2e Tokener');
+    assert.equal(button.dataset.tooltip, 'Tokener');
   } finally {
     globalThis.document = previousDocument;
     globalThis.game = previousGame;
@@ -2760,6 +2966,22 @@ test('module manifest declares English localization file', () => {
   ]);
 });
 
+test('module manifest is system agnostic while keeping the stable module id', () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL('../module.json', import.meta.url), 'utf8'));
+
+  assert.equal(manifest.id, 'pf2e-tokener');
+  assert.equal(manifest.title, 'Tokener');
+  assert.doesNotMatch(manifest.description, /PF2e|Pathfinder/i);
+  assert.equal(manifest.relationships?.systems, undefined);
+});
+
+test('ready hook no longer skips non-PF2e systems', () => {
+  const script = fs.readFileSync(new URL('../scripts/pf2e-tokener.js', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(script, /system\?\.id\s*!==\s*['"]pf2e['"]/);
+  assert.match(script, /await rebuildIndex\(\)/);
+});
+
 test('release archive zip command has valid shell continuations', () => {
   const workflow = fs.readFileSync(
     new URL('../.github/workflows/main.yml', import.meta.url),
@@ -2781,10 +3003,10 @@ test('English localization file contains Token HUD strings', () => {
     fs.readFileSync(new URL('../languages/en.json', import.meta.url), 'utf8'),
   );
 
-  assert.equal(translations['PF2ETokener.HUD.Tooltip'], 'PF2e Tokener');
+  assert.equal(translations['PF2ETokener.HUD.Tooltip'], 'Tokener');
   assert.equal(
     translations['PF2ETokener.HUD.RevertButtonTooltip'],
-    'PF2e Tokener - right-click to revert last change.',
+    'Tokener - right-click to revert last change.',
   );
   assert.equal(translations['PF2ETokener.HUD.SearchPlaceholder'], 'Search tokens');
   assert.equal(translations['PF2ETokener.HUD.AllSources'], 'All sources');
@@ -2840,26 +3062,23 @@ test('English localization file contains Token HUD strings', () => {
     translations['PF2ETokener.ActionTooltips.Both'],
     'Update the selected token and the actor default token art.',
   );
-  assert.equal(
-    translations['PF2ETokener.Notifications.Applied'],
-    'PF2e Tokener: token art applied.',
-  );
+  assert.equal(translations['PF2ETokener.Notifications.Applied'], 'Tokener: token art applied.');
   assert.equal(
     translations['PF2ETokener.Notifications.ApplyFailed'],
-    'PF2e Tokener: failed to apply token art.',
+    'Tokener: failed to apply token art.',
   );
   assert.equal(
     translations['PF2ETokener.Notifications.Reverted'],
-    'PF2e Tokener: previous art restored.',
+    'Tokener: previous art restored.',
   );
   assert.equal(
     translations['PF2ETokener.Notifications.RevertFailed'],
-    'PF2e Tokener: failed to restore previous art.',
+    'Tokener: failed to restore previous art.',
   );
   assert.equal(translations['PF2ETokener.Settings.Favorites.Name'], 'Favorite token art');
   assert.equal(
     translations['PF2ETokener.Settings.Favorites.Hint'],
-    'Token art marked as favorites in PF2e Tokener.',
+    'Token art marked as favorites in Tokener.',
   );
 });
 

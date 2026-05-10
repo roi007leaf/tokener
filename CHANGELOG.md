@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 - 2026-05-10
+
+### New
+
+- Added system profiles so native compendium art mappings are read from the active system id.
+- Added system-agnostic module startup while keeping PF2e legacy mapping support in the PF2e profile.
+
+### Improved
+
+- Rebranded the visible module name to Tokener while keeping the `pf2e-tokener` module id for compatibility.
+- Removed the PF2e-only manifest system relationship so the module can be enabled in other systems.
 
 ## 1.0.7 - 2026-05-08
 

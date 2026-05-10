@@ -111,7 +111,7 @@ export function getTokenPickerApplicationClass(
       window: {
         icon: 'fas fa-images',
         resizable: true,
-        title: 'PF2e Tokener',
+        title: 'Tokener',
       },
       position: {
         width: 720,
@@ -146,7 +146,7 @@ export function getTokenPickerApplicationClass(
     }
 
     get title() {
-      return localize('HUD.Tooltip', 'PF2e Tokener');
+      return localize('HUD.Tooltip', 'Tokener');
     }
 
     async _prepareContext(options) {
@@ -218,12 +218,16 @@ export function getPickerCandidatePool(
   const selectedTagIds = app?.selectedTagIds ?? new Set();
   const excludedTagIds = app?.selectedExcludedTagIds ?? app?.excludedTagIds ?? new Set();
   const query = buildCandidateSearchQuery(app?.searchQuery, selectedTagIds, excludedTagIds);
-  const browseMode = shouldBrowseAllResults(app, sourceOptions);
-  const allCandidates = browseMode
+  let browseMode = shouldBrowseAllResults(app, sourceOptions);
+  let allCandidates = browseMode
     ? searchCandidates(index, query, { limit: Number.POSITIVE_INFINITY })
     : getCandidatesForTokenDocument(index, app?.tokenDocument, query, {
         limit: Number.POSITIVE_INFINITY,
       });
+  if (!browseMode && !query && index.length && !allCandidates.length) {
+    browseMode = true;
+    allCandidates = searchCandidates(index, '', { limit: Number.POSITIVE_INFINITY });
+  }
   const sourceFilteredCandidates = filterCandidatesBySources(allCandidates, selectedSourceIds, {
     emptyMeansAll: false,
   });
@@ -674,9 +678,7 @@ function getScaleInput(card, target) {
 }
 
 function getScaleTarget(input) {
-  return input?.dataset?.scaleTarget === SCALE_TARGET_RING
-    ? SCALE_TARGET_RING
-    : SCALE_TARGET_TOKEN;
+  return input?.dataset?.scaleTarget === SCALE_TARGET_RING ? SCALE_TARGET_RING : SCALE_TARGET_TOKEN;
 }
 
 function getDefaultScaleValue(candidate, target, tokenDocument) {
@@ -1433,7 +1435,7 @@ function getCandidateCardTooltip(candidate) {
 
 function openFallbackPicker() {
   globalThis.ui?.notifications?.warn?.(
-    localize('Notifications.AppV2Unavailable', 'PF2e Tokener requires Foundry ApplicationV2.'),
+    localize('Notifications.AppV2Unavailable', 'Tokener requires Foundry ApplicationV2.'),
   );
   return null;
 }
@@ -1491,12 +1493,12 @@ async function applyCandidateAction(action, candidate, tokenDocument, card, app 
     }
 
     globalThis.ui?.notifications?.info?.(
-      localize('Notifications.Applied', 'PF2e Tokener: token art applied.'),
+      localize('Notifications.Applied', 'Tokener: token art applied.'),
     );
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to apply token art`, error);
     globalThis.ui?.notifications?.error?.(
-      localize('Notifications.ApplyFailed', 'PF2e Tokener: failed to apply token art.'),
+      localize('Notifications.ApplyFailed', 'Tokener: failed to apply token art.'),
     );
   } finally {
     card?.classList.remove('is-applying');
@@ -1519,12 +1521,12 @@ async function revertLastChange(app) {
     if (!reverted) return;
 
     globalThis.ui?.notifications?.info?.(
-      localize('Notifications.Reverted', 'PF2e Tokener: previous art restored.'),
+      localize('Notifications.Reverted', 'Tokener: previous art restored.'),
     );
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to revert token art`, error);
     globalThis.ui?.notifications?.error?.(
-      localize('Notifications.RevertFailed', 'PF2e Tokener: failed to restore previous art.'),
+      localize('Notifications.RevertFailed', 'Tokener: failed to restore previous art.'),
     );
   } finally {
     renderMainPart(app);

@@ -15,6 +15,7 @@ import {
 } from './candidates.js';
 import { getCustomFolderSources } from './custom-folders.js';
 import { applyImageTagOverrides } from './image-tags.js';
+import { getCurrentSystemProfile } from './system-profile.js';
 import { isObject, normalizePath } from './utils.js';
 
 const DATASHEET_BROWSE_ROOTS = [
@@ -69,11 +70,12 @@ export function installApi() {
 
 async function buildFoundryIndex() {
   const modules = getFoundryModules();
+  const profile = getCurrentSystemProfile();
   const candidates = [];
 
   for (const module of modules) {
     if (!module || module.id === MODULE_ID) continue;
-    candidates.push(...(await collectMappedModuleCandidates(module)));
+    candidates.push(...(await collectMappedModuleCandidates(module, profile)));
   }
 
   for (const module of modules) {
@@ -86,28 +88,45 @@ async function buildFoundryIndex() {
   return candidates;
 }
 
-async function collectMappedModuleCandidates(module) {
+async function collectMappedModuleCandidates(module, profile = getCurrentSystemProfile()) {
   const candidates = [];
   const seenDatasheets = new Set();
-  const native = module.flags?.compendiumArtMappings?.pf2e;
-  if (native?.mapping) {
+  for (const key of profile.nativeMappingKeys) {
+    const native = module.flags?.compendiumArtMappings?.[key];
+    if (!native?.mapping) continue;
     try {
       const mapping = await fetchJsonCompat(native.mapping);
-      candidates.push(...createMappedCandidates({ module, mapping, sourceType: 'native' }));
+      candidates.push(
+        ...createMappedCandidates({
+          module,
+          mapping,
+          sourceType: 'native',
+          systemId: profile.id,
+        }),
+      );
     } catch (error) {
       state.errors.push(error);
-      console.warn(`${MODULE_ID} | Failed native mapping for ${module.id}`, error);
+      console.warn(`${MODULE_ID} | Failed ${key} native mapping for ${module.id}`, error);
     }
   }
 
   for (const flag of Object.values(module.flags ?? {})) {
-    if (!isObject(flag) || !flag['pf2e-art']) continue;
+    if (!isObject(flag)) continue;
+    const legacyKey = profile.legacyMappingFlagKeys.find((key) => flag[key]);
+    if (!legacyKey) continue;
     try {
-      const mapping = await fetchJsonCompat(flag['pf2e-art']);
-      candidates.push(...createMappedCandidates({ module, mapping, sourceType: 'pf2e-art' }));
+      const mapping = await fetchJsonCompat(flag[legacyKey]);
+      candidates.push(
+        ...createMappedCandidates({
+          module,
+          mapping,
+          sourceType: legacyKey,
+          systemId: profile.id,
+        }),
+      );
     } catch (error) {
       state.errors.push(error);
-      console.warn(`${MODULE_ID} | Failed pf2e-art mapping for ${module.id}`, error);
+      console.warn(`${MODULE_ID} | Failed ${legacyKey} mapping for ${module.id}`, error);
     }
   }
 
@@ -116,7 +135,7 @@ async function collectMappedModuleCandidates(module) {
     await addDatasheetCandidates({ module, candidates, seenDatasheets, sheet: datasheet.sheet });
   }
 
-  if (isTokenDataModule(module)) {
+  if (isTokenDataModule(module, profile)) {
     for (const sheet of await discoverDatasheetSheets(module)) {
       await addDatasheetCandidates({ module, candidates, seenDatasheets, sheet });
     }
@@ -196,10 +215,8 @@ function getFoundryModules() {
   return [...modules];
 }
 
-function isTokenDataModule(module) {
-  return /pf2e|sf2e|token|collection|bestiary|battlezoo|beginner|abomination|summons|claws|kingmaker|monster|monsters|creature|creatures|npc|adventure|drakkenheim/i.test(
-    `${module.id ?? ''} ${module.title ?? ''}`,
-  );
+function isTokenDataModule(module, profile = getCurrentSystemProfile()) {
+  return profile.tokenDataModulePattern.test(`${module.id ?? ''} ${module.title ?? ''}`);
 }
 
 async function fetchJsonCompat(path) {

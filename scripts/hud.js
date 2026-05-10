@@ -1,8 +1,4 @@
-import {
-  getLastRevertData,
-  hasRevertTargets,
-  revertLastTokenerChange,
-} from './actions.js';
+import { getLastRevertData, hasRevertTargets, revertLastTokenerChange } from './actions.js';
 import { openTokenPicker, updateOpenPanelsCanvasZoom } from './picker-app.js';
 import { localize, normalizeHudElement } from './utils.js';
 
@@ -37,8 +33,8 @@ function setHudButtonRevertState(button, tokenDocument) {
   const hasRevert = hasRevertTargets(getLastRevertData(tokenDocument));
   button.className = `control-icon pf2e-tokener-button${hasRevert ? ' is-overridden' : ''}`;
   button.dataset.tooltip = hasRevert
-    ? localize('HUD.RevertButtonTooltip', 'PF2e Tokener - right-click to revert last change.')
-    : localize('HUD.Tooltip', 'PF2e Tokener');
+    ? localize('HUD.RevertButtonTooltip', 'Tokener - right-click to revert last change.')
+    : localize('HUD.Tooltip', 'Tokener');
 }
 
 async function revertFromHudButton(button, tokenDocument) {
@@ -49,12 +45,12 @@ async function revertFromHudButton(button, tokenDocument) {
     if (!reverted) return;
     setHudButtonRevertState(button, null);
     globalThis.ui?.notifications?.info?.(
-      localize('Notifications.Reverted', 'PF2e Tokener: previous art restored.'),
+      localize('Notifications.Reverted', 'Tokener: previous art restored.'),
     );
   } catch (error) {
     console.error('pf2e-tokener | Failed to revert token art from HUD button', error);
     globalThis.ui?.notifications?.error?.(
-      localize('Notifications.RevertFailed', 'PF2e Tokener: failed to restore previous art.'),
+      localize('Notifications.RevertFailed', 'Tokener: failed to restore previous art.'),
     );
   }
 }
