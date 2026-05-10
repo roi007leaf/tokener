@@ -1347,6 +1347,56 @@ test('source-only picker filtering browses all matching art with a render cap', 
   assert.ok(result.candidates.every((candidate) => candidate.moduleId === 'source-a'));
 });
 
+test('picker falls back to browsing all indexed art when the current token has no matches', () => {
+  const index = [
+    {
+      id: 'dnd-a',
+      label: 'Skeleton Warrior',
+      moduleId: 'dnd-tokens',
+      moduleTitle: 'DND Tokens',
+      tokenSrc: 'modules/dnd-tokens/tokens/skeleton-warrior.webp',
+      searchText: 'skeleton warrior dnd tokens dnd-tokens',
+    },
+    {
+      id: 'dnd-b',
+      label: 'Zombie Brute',
+      moduleId: 'dnd-tokens',
+      moduleTitle: 'DND Tokens',
+      tokenSrc: 'modules/dnd-tokens/tokens/zombie-brute.webp',
+      searchText: 'zombie brute dnd tokens dnd-tokens',
+    },
+  ];
+  const sourceOptions = getPanelSourceFilterOptions(index);
+  const result = getPickerCandidatePool(
+    index,
+    {
+      excludedTagIds: new Set(),
+      favoritesOnly: false,
+      resultLimit: 120,
+      searchQuery: '',
+      selectedSourceIds: new Set(['dnd-tokens']),
+      selectedTagIds: new Set(),
+      tokenDocument: {
+        actor: {
+          name: 'Guard Captain',
+          flags: { core: { sourceId: 'Compendium.dnd5e.monsters.Actor.guardCaptain' } },
+        },
+      },
+    },
+    {
+      favoriteIds: new Set(),
+      sourceOptions,
+    },
+  );
+
+  assert.equal(result.browseMode, true);
+  assert.equal(result.total, 2);
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.id),
+    ['dnd-a', 'dnd-b'],
+  );
+});
+
 test('source filter accepts multiple selected modules and can treat empty as none for HUD clear all', () => {
   const candidates = [
     { id: 'a', moduleId: 'bestiary' },

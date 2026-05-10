@@ -218,12 +218,16 @@ export function getPickerCandidatePool(
   const selectedTagIds = app?.selectedTagIds ?? new Set();
   const excludedTagIds = app?.selectedExcludedTagIds ?? app?.excludedTagIds ?? new Set();
   const query = buildCandidateSearchQuery(app?.searchQuery, selectedTagIds, excludedTagIds);
-  const browseMode = shouldBrowseAllResults(app, sourceOptions);
-  const allCandidates = browseMode
+  let browseMode = shouldBrowseAllResults(app, sourceOptions);
+  let allCandidates = browseMode
     ? searchCandidates(index, query, { limit: Number.POSITIVE_INFINITY })
     : getCandidatesForTokenDocument(index, app?.tokenDocument, query, {
         limit: Number.POSITIVE_INFINITY,
       });
+  if (!browseMode && !query && index.length && !allCandidates.length) {
+    browseMode = true;
+    allCandidates = searchCandidates(index, '', { limit: Number.POSITIVE_INFINITY });
+  }
   const sourceFilteredCandidates = filterCandidatesBySources(allCandidates, selectedSourceIds, {
     emptyMeansAll: false,
   });
