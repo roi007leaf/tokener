@@ -98,5 +98,7 @@
   "PF2ETokener.Settings.ImageTags.MenuHint": "Export or replace GM-added image tag overrides as JSON.",
   "PF2ETokener.Settings.ImageTags.ImportExportHint": "Copy or download GM-added image tag overrides. Paste JSON here and import to replace current overrides.",
   "PF2ETokener.Settings.ImageTags.Export": "Export JSON",
-  "PF2ETokener.Settings.ImageTags.Import": "Import JSON"
+  "PF2ETokener.Settings.ImageTags.Import": "Import JSON",
+  "PF2ETokener.Settings.PlayerOwned.Name": "Allow player-owned token access",
+  "PF2ETokener.Settings.PlayerOwned.Hint": "Let players open Tokener from Token HUD for tokens they can update. Actor sheet and actor directory controls remain GM-only."
 }

@@ -1,4 +1,5 @@
 import { REVERT_FLAG_PATH } from './actions.js';
+import { canUseActorTokenerEntry } from './permissions.js';
 import { openTokenPicker } from './picker-app.js';
 import { localize, normalizeHudElement } from './utils.js';
 
@@ -146,9 +147,7 @@ function getDirectoryActor(entry) {
 }
 
 function canUseTokenerActor(actor) {
-  if (!globalThis.game?.user?.isGM || !actor) return false;
-  if (globalThis.game.user.isGM) return true;
-  return canActorUserModify(actor, globalThis.game.user, 'update');
+  return canUseActorTokenerEntry(actor);
 }
 
 function canActorUserModify(actor, user, action) {

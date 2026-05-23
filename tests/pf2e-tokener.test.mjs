@@ -57,6 +57,9 @@ import {
   registerFavoriteSettings,
   registerImageTagSettings,
   renderTokenHud,
+  renderActorDirectoryTokenerEntry,
+  renderActorSheetTokenerEntry,
+  registerPermissionSettings,
   setTextTooltip,
   searchCandidates,
   state,
@@ -2325,6 +2328,48 @@ test('actor picker proxy defaults token scale to actor prototype token and hides
   }
 });
 
+test('player-owned token picker only offers the selected token action', async () => {
+  const previousGame = globalThis.game;
+  class FakeApplicationV2 {}
+  const fakeMixin = (BaseApplication) => class FakeHandlebarsApplication extends BaseApplication {};
+  const PickerApplication = getTokenPickerApplicationClass(FakeApplicationV2, fakeMixin);
+  state.index = [
+    {
+      id: 'guard-token',
+      label: 'Guard Token',
+      moduleId: 'custom',
+      moduleTitle: 'Custom',
+      scaleX: 1,
+      scaleY: 1,
+      searchText: 'guard token custom',
+      tokenSrc: 'uploads/tokens/guard.webp',
+      portraitSrc: 'uploads/portraits/guard.webp',
+    },
+  ];
+
+  try {
+    globalThis.game = {
+      user: { id: 'player1', isGM: false },
+      settings: { get: () => true },
+    };
+    const app = new PickerApplication({
+      tokenDocument: {
+        canUserModify: (user, action) => user.id === 'player1' && action === 'update',
+      },
+    });
+    const context = await app._prepareContext({});
+    const [card] = context.sections[0].candidates;
+
+    assert.deepEqual(
+      card.actions.map((action) => action.action),
+      ['token'],
+    );
+  } finally {
+    state.index = [];
+    globalThis.game = previousGame;
+  }
+});
+
 test('actor picker proxy writes token updates through the actor prototype token', async () => {
   const updates = [];
   const actor = {
@@ -2370,7 +2415,6 @@ test('actor sheet Tokener entry renders a top-left image button instead of right
   assert.match(actorEntry, /dataset\.tooltip/);
   assert.match(actorEntry, /addEventListener\?\.\('click'/);
   assert.match(actorEntry, /openTokenPickerForActor\(actor\)/);
-  assert.match(actorEntry, /game\.user\.isGM\) return true/);
   assert.doesNotMatch(sheetFunction, /contextmenu/);
   assert.match(css, /\.pf2e-tokener-actor-sheet-image-host\s*\{/);
   assert.match(css, /\.pf2e-tokener-actor-sheet-button\s*\{/);
@@ -2897,23 +2941,23 @@ test('HUD adapter accepts HTMLElement and jQuery-like wrappers', () => {
   assert.equal(normalizeHudElement({ 0: element, length: 1 }), element);
 });
 
-test('Token HUD button stays hidden for players even when they own the token actor', () => {
+test('player-owned Token HUD button stays hidden when player access setting is disabled', () => {
   const previousDocument = globalThis.document;
   const previousGame = globalThis.game;
   const { root, target } = createFakeHudRoot();
 
   try {
     globalThis.document = { createElement: createFakeElement };
-    globalThis.game = { user: { id: 'player1', isGM: false } };
+    globalThis.game = {
+      user: { id: 'player1', isGM: false },
+      settings: { get: () => false },
+    };
 
     renderTokenHud(
       {
         object: {
           document: {
-            actor: {
-              testUserPermission: (user, level) => user.id === 'player1' && level === 'OWNER',
-            },
-            canUserModify: () => false,
+            canUserModify: (user, action) => user.id === 'player1' && action === 'update',
           },
         },
       },
@@ -2928,6 +2972,118 @@ test('Token HUD button stays hidden for players even when they own the token act
     globalThis.document = previousDocument;
     globalThis.game = previousGame;
   }
+});
+
+test('Token HUD button renders for players who can update the token when enabled', () => {
+  const previousDocument = globalThis.document;
+  const previousGame = globalThis.game;
+  const { root, target } = createFakeHudRoot();
+
+  try {
+    globalThis.document = { createElement: createFakeElement };
+    globalThis.game = {
+      user: { id: 'player1', isGM: false },
+      settings: { get: () => true },
+    };
+
+    renderTokenHud(
+      {
+        object: {
+          document: {
+            canUserModify: (user, action) => user.id === 'player1' && action === 'update',
+          },
+        },
+      },
+      root,
+    );
+
+    assert.equal(
+      target.children.some((child) => child.className.includes('pf2e-tokener-button')),
+      true,
+    );
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.game = previousGame;
+  }
+});
+
+test('actor sheet Tokener button stays hidden for player-owned actors', () => {
+  const previousGame = globalThis.game;
+  const host = createFakeElement();
+  const image = createFakeElement();
+  const root = createFakeElement();
+  const addedClasses = [];
+  const actor = {
+    canUserModify: (user, action) => user.id === 'player1' && action === 'update',
+  };
+
+  try {
+    globalThis.game = {
+      user: { id: 'player1', isGM: false },
+      settings: { get: () => true },
+    };
+    root.ownerDocument = { createElement: createFakeElement };
+    root.querySelector = () => image;
+    image.closest = () => host;
+    host.querySelector = () => null;
+    host.classList = {
+      add: (className) => addedClasses.push(className),
+    };
+
+    renderActorSheetTokenerEntry({ actor }, root);
+
+    assert.deepEqual(addedClasses, []);
+    assert.equal(
+      host.children.some((child) =>
+        child.className.includes('pf2e-tokener-actor-sheet-button'),
+      ),
+      false,
+    );
+  } finally {
+    globalThis.game = previousGame;
+  }
+});
+
+test('actor directory Tokener listener stays GM-only', () => {
+  const previousGame = globalThis.game;
+  const root = createFakeElement();
+  const actor = {
+    canUserModify: (user, action) => user.id === 'player1' && action === 'update',
+  };
+
+  try {
+    globalThis.game = {
+      user: { id: 'player1', isGM: false },
+      settings: { get: () => true },
+      actors: {
+        get: (id) => (id === 'actor1' ? actor : null),
+      },
+    };
+
+    renderActorDirectoryTokenerEntry(null, root);
+
+    assert.equal(root.dataset.pf2eTokenerActorDirectoryBound, undefined);
+    assert.equal(typeof root.listeners.contextmenu, 'undefined');
+  } finally {
+    globalThis.game = previousGame;
+  }
+});
+
+test('player Tokener access setting registers as GM-configurable world setting', () => {
+  const calls = [];
+  const settings = {
+    register: (...args) => calls.push(args),
+  };
+
+  registerPermissionSettings(settings);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'pf2e-tokener');
+  assert.equal(calls[0][1], 'allowPlayerOwnedTokens');
+  assert.equal(calls[0][2].scope, 'world');
+  assert.equal(calls[0][2].config, true);
+  assert.equal(calls[0][2].type, Boolean);
+  assert.equal(calls[0][2].default, false);
 });
 
 test('GM Token HUD button opens ApplicationV2 picker instead of HUD child panel', async () => {
@@ -3417,6 +3573,14 @@ test('English localization file contains Token HUD strings', () => {
   assert.equal(
     translations['PF2ETokener.Settings.Favorites.Hint'],
     'Token art marked as favorites in Tokener.',
+  );
+  assert.equal(
+    translations['PF2ETokener.Settings.PlayerOwned.Name'],
+    'Allow player-owned token access',
+  );
+  assert.match(
+    translations['PF2ETokener.Settings.PlayerOwned.Hint'],
+    /tokens they can update/,
   );
 });
 

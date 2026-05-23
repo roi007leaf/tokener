@@ -1,4 +1,5 @@
 import { getLastRevertData, hasRevertTargets, revertLastTokenerChange } from './actions.js';
+import { canUseTokenHudDocument } from './permissions.js';
 import { openTokenPicker, updateOpenPanelsCanvasZoom } from './picker-app.js';
 import { localize, normalizeHudElement } from './utils.js';
 
@@ -60,19 +61,5 @@ function getHudTokenDocument(app) {
 }
 
 function canUseTokener(tokenDocument) {
-  if (!globalThis.game?.user?.isGM) return false;
-  return canUpdateDocument(tokenDocument);
-}
-
-function canUpdateDocument(document) {
-  if (!document) return false;
-  const user = globalThis.game?.user;
-  try {
-    if (typeof document.canUserModify === 'function') return document.canUserModify(user, 'update');
-    if (typeof document.testUserPermission === 'function')
-      return document.testUserPermission(user, 'OWNER');
-  } catch {
-    return false;
-  }
-  return Boolean(document.isOwner ?? user?.isGM);
+  return canUseTokenHudDocument(tokenDocument);
 }

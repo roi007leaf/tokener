@@ -27,6 +27,7 @@ import {
   parseImageTagOverrideImport,
   setImageTagOverrides,
 } from './image-tags.js';
+import { shouldRestrictTokenerToSelectedToken } from './permissions.js';
 import { openImagePreview } from './preview.js';
 import {
   filterCandidatesBySources,
@@ -1044,6 +1045,11 @@ function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
 
 function getPickerApplyActionsForCandidate(candidate, tokenDocument) {
   const actions = getApplyActionsForCandidate(candidate);
+  if (shouldRestrictTokenerToSelectedToken()) {
+    return tokenDocument?.isTokenerActorProxy
+      ? []
+      : actions.filter((option) => option.action === 'token');
+  }
   if (!tokenDocument?.isTokenerActorProxy) return actions;
   return actions.filter((option) => option.action !== 'token' && option.action !== 'both');
 }

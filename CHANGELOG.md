@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1 - 2026-05-23
+
+### Fixed
+
+- Fixed player-owned Token HUD access behind a GM-configurable world setting.
+
 ## 2.1.0 - 2026-05-23
 
 ### New

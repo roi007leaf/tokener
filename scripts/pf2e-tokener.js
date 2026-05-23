@@ -5,6 +5,7 @@ import { registerFavoriteSettings } from './favorites.js';
 import { installApi, rebuildIndex, state } from './foundry-index.js';
 import { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 import { registerImageTagSettings } from './image-tags.js';
+import { registerPermissionSettings } from './permissions.js';
 
 export { MODULE_ID } from './constants.js';
 export {
@@ -74,6 +75,13 @@ export {
   resolveApplicationV2Class,
   resolveHandlebarsApplicationMixin,
 } from './picker-app.js';
+export {
+  canUseTokenHudDocument,
+  canUseActorTokenerEntry,
+  canUserUpdateDocument,
+  registerPermissionSettings,
+  shouldRestrictTokenerToSelectedToken,
+} from './permissions.js';
 export { getCandidatePreviewTagGroups, getImagePreviewItems, openImagePreview } from './preview.js';
 export {
   filterSourceOptionsByQuery,
@@ -129,6 +137,7 @@ function registerFoundryIntegration() {
     registerFavoriteSettings();
     registerCustomFolderSettings();
     registerImageTagSettings();
+    registerPermissionSettings();
   });
 
   hooks.once('ready', async () => {
