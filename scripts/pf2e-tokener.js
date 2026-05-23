@@ -1,4 +1,5 @@
 import { MODULE_ID } from './constants.js';
+import { renderActorDirectoryTokenerEntry, renderActorSheetTokenerEntry } from './actor-entry.js';
 import { registerCustomFolderSettings } from './custom-folders.js';
 import { registerFavoriteSettings } from './favorites.js';
 import { installApi, rebuildIndex, state } from './foundry-index.js';
@@ -6,6 +7,12 @@ import { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 import { registerImageTagSettings } from './image-tags.js';
 
 export { MODULE_ID } from './constants.js';
+export {
+  createActorTokenDocument,
+  openTokenPickerForActor,
+  renderActorDirectoryTokenerEntry,
+  renderActorSheetTokenerEntry,
+} from './actor-entry.js';
 export {
   buildActorUpdate,
   buildActorRevertUpdate,
@@ -47,7 +54,13 @@ export {
 } from './custom-folders.js';
 export {
   applyImageTagOverrides,
+  downloadImageTagJson,
+  getImageTagOverridesApplicationClass,
+  getImageTagOverrideExport,
+  getImageTagOverridesExport,
+  importImageTagOverrides,
   getImageTagOverrides,
+  parseImageTagOverrideImport,
   registerImageTagSettings,
   setImageTagOverrides,
 } from './image-tags.js';
@@ -93,6 +106,21 @@ export {
   normalizeSystemPackKey,
 } from './system-profile.js';
 
+const ACTOR_SHEET_RENDER_HOOKS = [
+  'renderActorSheet',
+  'renderActorSheetPF2e',
+  'renderCreatureSheetPF2e',
+  'renderCharacterSheetPF2e',
+  'renderNPCSheetPF2e',
+  'renderSimpleNPCSheet',
+  'renderHazardSheetPF2e',
+  'renderLootSheetPF2e',
+  'renderFamiliarSheetPF2e',
+  'renderVehicleSheetPF2e',
+  'renderPartySheetPF2e',
+  'renderArmySheetPF2e',
+];
+
 function registerFoundryIntegration() {
   const hooks = globalThis.Hooks;
   if (!hooks || typeof hooks.once !== 'function') return;
@@ -107,6 +135,10 @@ function registerFoundryIntegration() {
     installApi();
     await rebuildIndex();
     hooks.on('renderTokenHUD', renderTokenHud);
+    for (const hook of ACTOR_SHEET_RENDER_HOOKS) {
+      hooks.on(hook, renderActorSheetTokenerEntry);
+    }
+    hooks.on('renderActorDirectory', renderActorDirectoryTokenerEntry);
     hooks.on('canvasPan', updateOpenPanelsCanvasZoom);
     console.log(`${MODULE_ID} | indexed ${state.index.length} token art candidates`);
   });

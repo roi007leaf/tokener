@@ -29,6 +29,7 @@ import {
   buildCandidateSearchQuery,
   getTokenPickerApplicationClass,
   rebuildIndex,
+  createActorTokenDocument,
   createCustomFolderCandidates,
   createDatasheetCandidates,
   createFolderCandidates,
@@ -39,6 +40,10 @@ import {
   getFavoriteIds,
   getCustomFolderSettingsApplicationClass,
   getCustomFolderSources,
+  getImageTagOverrideExport,
+  getImageTagOverridesExport,
+  importImageTagOverrides,
+  parseImageTagOverrideImport,
   applyImageTagOverrides,
   setImageTagOverrides,
   setCustomFolderImageTags,
@@ -50,6 +55,7 @@ import {
   normalizeSystemPackKey,
   registerCustomFolderSettings,
   registerFavoriteSettings,
+  registerImageTagSettings,
   renderTokenHud,
   setTextTooltip,
   searchCandidates,
@@ -1971,6 +1977,177 @@ test('GM image tag overrides apply to any source without replacing original tags
   assert.equal(searchCandidates([tagged], 'custom:boss')[0].id, tagged.id);
 });
 
+test('image tag overrides can be exported and imported as normalized JSON', async () => {
+  let stored = {
+    'uploads/NPCs/Boss.webp': {
+      Custom: ['Boss', 'Boss'],
+      empty: [],
+    },
+  };
+  const settings = {
+    get: () => stored,
+    set: async (_moduleId, key, value) => {
+      assert.equal(key, 'imageTags');
+      stored = value;
+      return value;
+    },
+  };
+
+  assert.equal(
+    getImageTagOverridesExport(settings),
+    JSON.stringify(
+      {
+        'uploads/NPCs/Boss.webp': {
+          custom: ['boss'],
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  await importImageTagOverrides(
+    JSON.stringify({
+      'uploads/NPCs/Merchant.webp': {
+        Creature: ['Merchant'],
+        tag: 'Shopkeeper',
+      },
+    }),
+    settings,
+  );
+
+  assert.deepEqual(stored, {
+    'uploads/NPCs/Merchant.webp': {
+      creature: ['merchant'],
+      tag: ['shopkeeper'],
+    },
+  });
+
+  await importImageTagOverrides(
+    JSON.stringify({
+      image: 'uploads/NPCs/Boss.webp',
+      tags: {
+        Custom: ['Boss'],
+      },
+    }),
+    settings,
+  );
+
+  assert.deepEqual(stored, {
+    'uploads/NPCs/Boss.webp': {
+      custom: ['boss'],
+    },
+  });
+  await assert.rejects(
+    () =>
+      importImageTagOverrides(
+        JSON.stringify({
+          tags: {
+            Custom: ['No Path'],
+          },
+        }),
+        settings,
+      ),
+    /Invalid image tag JSON/,
+  );
+  await assert.rejects(() => importImageTagOverrides('{', settings), /Invalid image tag JSON/);
+});
+
+test('single image tag JSON only carries custom tags for the edited image', () => {
+  const imagePath = 'uploads/NPCs/Boss.webp';
+
+  assert.equal(
+    getImageTagOverrideExport({
+      Custom: ['Boss', 'Boss'],
+      empty: [],
+    }),
+    JSON.stringify(
+      {
+        tags: {
+          custom: ['boss'],
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  assert.doesNotMatch(getImageTagOverrideExport({ Custom: ['Boss'] }), /"image"/);
+  assert.deepEqual(
+    parseImageTagOverrideImport(
+      JSON.stringify({
+        image: 'uploads/other.webp',
+        tags: {
+          Creature: ['Merchant'],
+        },
+      }),
+      imagePath,
+    ),
+    {
+      creature: ['merchant'],
+    },
+  );
+  assert.deepEqual(
+    parseImageTagOverrideImport(
+      JSON.stringify({
+        [imagePath]: {
+          Custom: ['Boss'],
+        },
+        'uploads/other.webp': {
+          custom: ['ignore-me'],
+        },
+      }),
+      imagePath,
+    ),
+    {
+      custom: ['boss'],
+    },
+  );
+  assert.deepEqual(parseImageTagOverrideImport(JSON.stringify({ Custom: ['Boss'] }), imagePath), {
+    custom: ['boss'],
+  });
+  assert.throws(() => parseImageTagOverrideImport('{', imagePath), /Invalid image tag JSON/);
+});
+
+test('image tag settings expose a restricted import export menu when Foundry forms are available', () => {
+  const previousFoundry = globalThis.foundry;
+  const calls = [];
+  const menuCalls = [];
+  class FakeApplicationV2 {}
+  class FakeDialogV2 {}
+  globalThis.foundry = {
+    applications: {
+      api: {
+        ApplicationV2: FakeApplicationV2,
+        DialogV2: FakeDialogV2,
+      },
+    },
+  };
+  const settings = {
+    register: (...args) => calls.push(args),
+    registerMenu: (...args) => menuCalls.push(args),
+  };
+
+  try {
+    registerImageTagSettings(settings);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][1], 'imageTags');
+    assert.equal(calls[0][2].config, false);
+    assert.equal(menuCalls.length, 1);
+    assert.equal(menuCalls[0][1], 'imageTagsMenu');
+    assert.equal(menuCalls[0][2].restricted, true);
+    assert.match(menuCalls[0][2].type.prototype.openDialog.toString(), /importImageTagOverrides/);
+    assert.match(
+      fs.readFileSync(new URL('../scripts/image-tags.js', import.meta.url), 'utf8'),
+      /data-image-tags-export/,
+    );
+  } finally {
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+  }
+});
+
 test('picker template renders edit tags for all indexed image cards', () => {
   const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
 
@@ -2001,7 +2178,15 @@ test('custom image tag dialog shows selected tags and supports chip removal', ()
   assert.match(picker, /pf2e-tokener-custom-image-tags-selected/);
   assert.match(picker, /pf2e-tokener-custom-image-tags-create/);
   assert.match(picker, /data-custom-image-tag-action="add"/);
+  assert.match(picker, /data-custom-image-tag-action="export-json"/);
+  assert.match(picker, /data-custom-image-tag-action="import-json"/);
+  assert.match(picker, /data-custom-image-tags-json/);
   assert.match(picker, /addCustomImageTag/);
+  assert.match(picker, /exportCustomImageTags/);
+  assert.match(picker, /importCustomImageTags/);
+  assert.match(picker, /getImageTagOverrideExport/);
+  assert.match(picker, /parseImageTagOverrideImport/);
+  assert.match(picker, /downloadImageTagJson/);
   assert.match(picker, /renderCustomImageHiddenTagInputs/);
   assert.match(picker, /data-custom-image-tag-remove/);
   assert.match(picker, /candidate\.originalTags/);
@@ -2011,6 +2196,7 @@ test('custom image tag dialog shows selected tags and supports chip removal', ()
   assert.match(picker, /new Set\(tagsToIds\(candidate\.imageTagOverrides\)\)/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-selected\s*\{/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-create\s*\{/);
+  assert.match(css, /\.pf2e-tokener-custom-image-tags-json\s*\{/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-chip\s*\{/);
   assert.match(css, /\.pf2e-tokener-custom-image-tags-chip:disabled\s*\{/);
 });
@@ -2057,6 +2243,139 @@ test('token scale slider previews scene token scale and reuses preview revert sn
   assert.match(picker, /dataScaleReset/);
   assert.match(picker, /buildTokenUpdate\(candidate, \{ scale, ringScale \}\)/);
   assert.match(picker, /buildActorUpdate\(candidate, \{ scale, ringScale \}\)/);
+});
+
+test('token scale sliders default to the current scene token scale before candidate metadata', async () => {
+  class FakeApplicationV2 {}
+  const fakeMixin = (BaseApplication) => class FakeHandlebarsApplication extends BaseApplication {};
+  const PickerApplication = getTokenPickerApplicationClass(FakeApplicationV2, fakeMixin);
+  state.index = [
+    {
+      id: 'double-scale-art',
+      label: 'Double Scale Art',
+      moduleId: 'custom',
+      moduleTitle: 'Custom',
+      scaleX: 1,
+      scaleY: 1,
+      searchText: 'double scale art custom',
+      tokenSrc: 'uploads/tokens/double.webp',
+    },
+  ];
+
+  try {
+    const app = new PickerApplication({
+      tokenDocument: {
+        texture: {
+          scaleX: 2,
+          scaleY: 2,
+        },
+      },
+    });
+    const context = await app._prepareContext({});
+    const [card] = context.sections[0].candidates;
+
+    assert.equal(card.scaleControls[0].target, 'token');
+    assert.equal(card.scaleControls[0].value, '2');
+  } finally {
+    state.index = [];
+  }
+});
+
+test('actor picker proxy defaults token scale to actor prototype token and hides scene token actions', async () => {
+  class FakeApplicationV2 {}
+  const fakeMixin = (BaseApplication) => class FakeHandlebarsApplication extends BaseApplication {};
+  const PickerApplication = getTokenPickerApplicationClass(FakeApplicationV2, fakeMixin);
+  const actor = {
+    id: 'actor1',
+    name: 'Guard Captain',
+    prototypeToken: {
+      texture: {
+        src: 'actors/guard-token.webp',
+        scaleX: 1.75,
+        scaleY: 1.75,
+      },
+    },
+  };
+  const tokenDocument = createActorTokenDocument(actor);
+  state.index = [
+    {
+      id: 'guard-token',
+      label: 'Guard Token',
+      moduleId: 'custom',
+      moduleTitle: 'Custom',
+      scaleX: 1,
+      scaleY: 1,
+      searchText: 'guard token custom',
+      tokenSrc: 'uploads/tokens/guard.webp',
+    },
+  ];
+
+  try {
+    const app = new PickerApplication({ tokenDocument });
+    const context = await app._prepareContext({});
+    const [card] = context.sections[0].candidates;
+
+    assert.equal(card.scaleControls[0].value, '1.75');
+    assert.deepEqual(
+      card.actions.map((action) => action.action),
+      ['actor', 'portrait'],
+    );
+  } finally {
+    state.index = [];
+  }
+});
+
+test('actor picker proxy writes token updates through the actor prototype token', async () => {
+  const updates = [];
+  const actor = {
+    prototypeToken: {
+      texture: {
+        src: 'old.webp',
+        scaleX: 2,
+        scaleY: 2,
+      },
+    },
+    async update(update) {
+      updates.push(update);
+    },
+  };
+  const tokenDocument = createActorTokenDocument(actor);
+
+  assert.equal(tokenDocument.get('texture.scaleX'), 2);
+  await tokenDocument.update({
+    'texture.src': 'new.webp',
+    'texture.scaleX': 1.5,
+    [REVERT_FLAG_PATH]: { label: 'Old Art' },
+  });
+
+  assert.deepEqual(updates, [
+    {
+      'prototypeToken.texture.src': 'new.webp',
+      'prototypeToken.texture.scaleX': 1.5,
+      [REVERT_FLAG_PATH]: { label: 'Old Art' },
+    },
+  ]);
+});
+
+test('actor sheet Tokener entry renders a top-left image button instead of right-click hook', () => {
+  const actorEntry = fs.readFileSync(new URL('../scripts/actor-entry.js', import.meta.url), 'utf8');
+  const sheetFunction = actorEntry.slice(
+    actorEntry.indexOf('export function renderActorSheetTokenerEntry'),
+    actorEntry.indexOf('export function renderActorDirectoryTokenerEntry'),
+  );
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+
+  assert.match(actorEntry, /pf2e-tokener-actor-sheet-button/);
+  assert.match(actorEntry, /installActorSheetTokenerButton/);
+  assert.match(actorEntry, /dataset\.tooltip/);
+  assert.match(actorEntry, /addEventListener\?\.\('click'/);
+  assert.match(actorEntry, /openTokenPickerForActor\(actor\)/);
+  assert.match(actorEntry, /game\.user\.isGM\) return true/);
+  assert.doesNotMatch(sheetFunction, /contextmenu/);
+  assert.match(css, /\.pf2e-tokener-actor-sheet-image-host\s*\{/);
+  assert.match(css, /\.pf2e-tokener-actor-sheet-button\s*\{/);
+  assert.match(css, /top:\s*4px;/);
+  assert.match(css, /left:\s*4px;/);
 });
 
 test('favorite candidate helper toggles ids and filters candidates', async () => {
@@ -2980,6 +3299,10 @@ test('ready hook no longer skips non-PF2e systems', () => {
 
   assert.doesNotMatch(script, /system\?\.id\s*!==\s*['"]pf2e['"]/);
   assert.match(script, /await rebuildIndex\(\)/);
+  assert.match(script, /'renderActorSheet'/);
+  assert.match(script, /hooks\.on\(hook, renderActorSheetTokenerEntry\)/);
+  assert.match(script, /'renderNPCSheetPF2e'/);
+  assert.match(script, /hooks\.on\('renderActorDirectory', renderActorDirectoryTokenerEntry\)/);
 });
 
 test('release archive zip command has valid shell continuations', () => {
@@ -3008,6 +3331,7 @@ test('English localization file contains Token HUD strings', () => {
     translations['PF2ETokener.HUD.RevertButtonTooltip'],
     'Tokener - right-click to revert last change.',
   );
+  assert.equal(translations['PF2ETokener.HUD.ActorSheetButtonTooltip'], 'Open Tokener');
   assert.equal(translations['PF2ETokener.HUD.SearchPlaceholder'], 'Search tokens');
   assert.equal(translations['PF2ETokener.HUD.AllSources'], 'All sources');
   assert.equal(translations['PF2ETokener.HUD.NoSources'], 'No sources');
@@ -3026,6 +3350,20 @@ test('English localization file contains Token HUD strings', () => {
   assert.equal(translations['PF2ETokener.HUD.FavoritesTooltip'], 'Show only favorite token art.');
   assert.equal(translations['PF2ETokener.HUD.AddFavorite'], 'Add favorite');
   assert.equal(translations['PF2ETokener.HUD.RemoveFavorite'], 'Remove favorite');
+  assert.equal(translations['PF2ETokener.HUD.EditCustomImageTags'], 'Edit image tags');
+  assert.equal(translations['PF2ETokener.HUD.SaveImageTags'], 'Save tags');
+  assert.equal(
+    translations['PF2ETokener.HUD.CustomImageTagsHint'],
+    'Choose GM tags to add to this image. Original source tags are read-only.',
+  );
+  assert.equal(translations['PF2ETokener.HUD.SelectedImageTags'], 'Selected tags');
+  assert.equal(translations['PF2ETokener.HUD.ImageTagsJson'], 'Import / export JSON');
+  assert.equal(
+    translations['PF2ETokener.HUD.ImageTagsJsonHint'],
+    'Per-image JSON uses only GM-added tags. Source tags stay read-only.',
+  );
+  assert.equal(translations['PF2ETokener.HUD.ExportImageTags'], 'Export JSON');
+  assert.equal(translations['PF2ETokener.HUD.ImportImageTags'], 'Import JSON');
   assert.equal(translations['PF2ETokener.HUD.ShowMore'], 'Show more');
   assert.equal(translations['PF2ETokener.HUD.BestMatches'], 'Best matches');
   assert.equal(translations['PF2ETokener.HUD.SearchResults'], 'Search results');
@@ -3578,6 +3916,37 @@ test('image preview helper hides missing image panes', () => {
   ]);
 });
 
+test('image preview helper can use dynamic subject art when token art is unavailable', () => {
+  assert.deepEqual(
+    getImagePreviewItems({
+      subjectSrc: 'subject.webp',
+    }),
+    [
+      {
+        kind: 'subject',
+        label: 'Token subject',
+        src: 'subject.webp',
+        available: true,
+      },
+    ],
+  );
+});
+
+test('picker image failure keeps the candidate map aligned with surviving preview art', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+
+  assert.match(picker, /app\._candidateMap\.set\(card\.dataset\.candidateId, availableCandidate\)/);
+});
+
+test('picker image failure retargets image tags to the surviving preview art', () => {
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+
+  assert.match(
+    picker,
+    /imageTagPath:\s*getCandidatePreviewSources\(availableCandidate\)\[0\]\s*\?\?\s*availableCandidate\.imageTagPath/,
+  );
+});
+
 test('English localization file contains image preview strings', () => {
   const translations = JSON.parse(
     fs.readFileSync(new URL('../languages/en.json', import.meta.url), 'utf8'),
@@ -3585,6 +3954,9 @@ test('English localization file contains image preview strings', () => {
 
   assert.equal(translations['PF2ETokener.Preview.ActorImage'], 'Actor image');
   assert.equal(translations['PF2ETokener.Preview.TokenImage'], 'Token image');
+  assert.equal(translations['PF2ETokener.Preview.SubjectImage'], 'Token subject');
+  assert.equal(translations['PF2ETokener.Preview.ImageUnavailable'], 'Image failed to load.');
+  assert.equal(translations['PF2ETokener.Preview.NoImages'], 'No image available.');
   assert.equal(translations['PF2ETokener.Preview.Close'], 'Close preview');
   assert.equal(translations['PF2ETokener.Preview.ActorUnavailable'], 'No actor image available.');
 });
@@ -3594,7 +3966,7 @@ test('image preview CSS is fullscreen and side by side', () => {
   const preview = fs.readFileSync(new URL('../scripts/preview.js', import.meta.url), 'utf8');
   const overlayRule = css.match(/\.pf2e-tokener-preview\s*\{[^}]+\}/)?.[0] ?? '';
   const panesRule = css.match(/\.pf2e-tokener-preview-panes\s*\{[^}]+\}/)?.[0] ?? '';
-  const hiddenPaneRule = css.match(/\.pf2e-tokener-preview-pane\.is-hidden\s*\{[^}]+\}/)?.[0] ?? '';
+  const errorRule = css.match(/\.pf2e-tokener-preview-error\s*\{[^}]+\}/)?.[0] ?? '';
   const tagsRule = css.match(/\.pf2e-tokener-preview-tags\s*\{[^}]+\}/)?.[0] ?? '';
   const tagRowRule = css.match(/\.pf2e-tokener-preview-tag-row\s*\{[^}]+\}/)?.[0] ?? '';
   const tagValuesRule = css.match(/\.pf2e-tokener-preview-tag-values\s*\{[^}]+\}/)?.[0] ?? '';
@@ -3602,13 +3974,11 @@ test('image preview CSS is fullscreen and side by side', () => {
   assert.match(overlayRule, /position:\s*fixed;/);
   assert.match(overlayRule, /inset:\s*0;/);
   assert.match(panesRule, /grid-template-columns:\s*repeat\(auto-fit, minmax\(320px, 1fr\)\);/);
-  assert.match(hiddenPaneRule, /display:\s*none;/);
+  assert.match(errorRule, /text-align:\s*center;/);
   assert.match(tagsRule, /justify-self:\s*center;/);
   assert.match(tagsRule, /width:\s*min\(640px,\s*100%\);/);
   assert.match(tagRowRule, /grid-template-columns:\s*90px minmax\(0,\s*1fr\);/);
   assert.match(tagValuesRule, /justify-content:\s*start;/);
-  assert.match(
-    preview,
-    /image\.addEventListener\('error', \(\) => pane\.classList\.add\('is-hidden'\)\)/,
-  );
+  assert.match(preview, /showPreviewImageError/);
+  assert.doesNotMatch(preview, /classList\.add\('is-hidden'\)/);
 });

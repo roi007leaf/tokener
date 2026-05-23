@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.1.0 - 2026-05-23
+
+### New
+
+- Added a Tokener button to actor sheet images plus actor directory/sidebar actor controls.
+- Added per-image import/export JSON for GM-added image tags in the image tag editor.
+
+### Improved
+
+- Token art scale controls now default to the current scene token scale or actor prototype token scale.
+- Per-image tag JSON now exports only custom GM tags so it can be imported onto any image.
+
+### Fixed
+
+- Fixed image previews that could open without a visible image when token art was unavailable.
+- Fixed failed card previews retargeting image-tag edits to the wrong art source.
+
 ## 2.0.0 - 2026-05-10
 
 ### New

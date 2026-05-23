@@ -21,7 +21,12 @@ import {
   toggleFavoriteCandidate,
 } from './favorites.js';
 import { ensureIndex } from './foundry-index.js';
-import { setImageTagOverrides } from './image-tags.js';
+import {
+  downloadImageTagJson,
+  getImageTagOverrideExport,
+  parseImageTagOverrideImport,
+  setImageTagOverrides,
+} from './image-tags.js';
 import { openImagePreview } from './preview.js';
 import {
   filterCandidatesBySources,
@@ -515,6 +520,7 @@ function handlePickerImageError(app, event) {
   const failedSources = getFailedPreviewSources(image);
   failedSources.add(normalizePath(image.dataset.previewSrc || image.getAttribute?.('src')).trim());
   const availableCandidate = removeFailedCandidateSources(candidate, failedSources);
+  app._candidateMap.set(card.dataset.candidateId, availableCandidate);
   syncCardActions(card, availableCandidate);
 
   const nextPreviewSrc = getCandidatePreviewSources(availableCandidate)[0];
@@ -538,7 +544,7 @@ function getFailedPreviewSources(image) {
 }
 
 function removeFailedCandidateSources(candidate, failedSources) {
-  return {
+  const availableCandidate = {
     ...candidate,
     portraitSrc: failedSources.has(normalizePath(candidate?.portraitSrc).trim())
       ? ''
@@ -549,6 +555,11 @@ function removeFailedCandidateSources(candidate, failedSources) {
     tokenSrc: failedSources.has(normalizePath(candidate?.tokenSrc).trim())
       ? ''
       : candidate?.tokenSrc,
+  };
+  return {
+    ...availableCandidate,
+    imageTagPath:
+      getCandidatePreviewSources(availableCandidate)[0] ?? availableCandidate.imageTagPath,
   };
 }
 
@@ -684,7 +695,7 @@ function getScaleTarget(input) {
 function getDefaultScaleValue(candidate, target, tokenDocument) {
   return target === SCALE_TARGET_RING
     ? getCandidateDynamicRingScale(candidate, tokenDocument)
-    : getCandidateLinkedScale(candidate);
+    : getCandidateLinkedScale(candidate, tokenDocument);
 }
 
 function updateCardScaleValue(card, target, scale) {
@@ -991,7 +1002,7 @@ function prepareCandidateSections(candidates, app, favoriteIds = new Set()) {
 
 function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
   app._candidateMap.set(viewId, candidate);
-  const actions = getApplyActionsForCandidate(candidate);
+  const actions = getPickerApplyActionsForCandidate(candidate, app.tokenDocument);
   const previewSrc = getCandidatePreviewSrc(candidate);
   const hasPreview = Boolean(previewSrc);
   const isUnavailable = actions.length === 0;
@@ -1031,6 +1042,12 @@ function prepareCandidateView(candidate, app, viewId, favoriteIds = new Set()) {
   };
 }
 
+function getPickerApplyActionsForCandidate(candidate, tokenDocument) {
+  const actions = getApplyActionsForCandidate(candidate);
+  if (!tokenDocument?.isTokenerActorProxy) return actions;
+  return actions.filter((option) => option.action !== 'token' && option.action !== 'both');
+}
+
 function hasTokenScaleAction(actions) {
   return actions.some(
     (option) => option.action === 'token' || option.action === 'actor' || option.action === 'both',
@@ -1039,7 +1056,7 @@ function hasTokenScaleAction(actions) {
 
 function prepareScaleControlViews(candidate, tokenDocument) {
   const controls = [
-    prepareScaleControlView(SCALE_TARGET_TOKEN, getCandidateLinkedScale(candidate)),
+    prepareScaleControlView(SCALE_TARGET_TOKEN, getCandidateLinkedScale(candidate, tokenDocument)),
   ];
   if (hasDynamicRingScaleControl(candidate)) {
     controls.push(
@@ -1079,11 +1096,30 @@ function hasDynamicRingScaleControl(candidate) {
   return Boolean(candidate?.subjectSrc);
 }
 
-function getCandidateLinkedScale(candidate) {
+function getCandidateLinkedScale(candidate, tokenDocument) {
+  const currentScale = getCurrentTokenScale(tokenDocument);
+  if (currentScale !== null) return currentScale;
+
   const scaleX = Number(candidate?.scaleX ?? candidate?.scale ?? 1);
   const scaleY = Number(candidate?.scaleY ?? candidate?.scale ?? scaleX);
   const scale = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : scaleY;
   return clampScaleValue(scale);
+}
+
+function getCurrentTokenScale(tokenDocument) {
+  const tokenScale = getDocumentLinkedScale(tokenDocument);
+  if (tokenScale !== null) return tokenScale;
+
+  const actor = getDocumentActor(tokenDocument);
+  return getDocumentLinkedScale(actor?.prototypeToken ?? actor?._source?.prototypeToken);
+}
+
+function getDocumentLinkedScale(documentLike) {
+  if (!documentLike) return null;
+  const scaleX = Number(readDocumentValue(documentLike, 'texture.scaleX'));
+  const scaleY = Number(readDocumentValue(documentLike, 'texture.scaleY'));
+  const scale = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : scaleY;
+  return Number.isFinite(scale) && scale > 0 ? clampScaleValue(scale) : null;
 }
 
 function getCandidateDynamicRingScale(candidate, tokenDocument) {
@@ -1129,7 +1165,7 @@ async function openCustomImageTagsDialog(app, candidate) {
       title: localize('HUD.EditCustomImageTags', 'Edit image tags'),
     },
     position: {
-      width: 560,
+      width: 640,
     },
     content,
     render: (_event, dialog) => activateCustomImageTagsDialog(dialog),
@@ -1162,6 +1198,26 @@ function activateCustomImageTagsDialog(dialog) {
     if (addButton) {
       event.preventDefault?.();
       addCustomImageTag(root);
+      return;
+    }
+
+    const exportButton = closestTarget(
+      event.target,
+      '[data-custom-image-tag-action="export-json"]',
+    );
+    if (exportButton) {
+      event.preventDefault?.();
+      exportCustomImageTags(root);
+      return;
+    }
+
+    const importButton = closestTarget(
+      event.target,
+      '[data-custom-image-tag-action="import-json"]',
+    );
+    if (importButton) {
+      event.preventDefault?.();
+      importCustomImageTags(root);
       return;
     }
 
@@ -1201,7 +1257,10 @@ function renderCustomImageTagsContent(candidate, tagOptions) {
     originalIds,
   );
 
-  return `<div class="pf2e-tokener-custom-image-tags">
+  return `<div
+    class="pf2e-tokener-custom-image-tags"
+    data-image-tag-path="${escapeHtml(candidate.imageTagPath)}"
+  >
     <p class="notes">${escapeHtml(
       localize('HUD.CustomImageTagsHint', 'Choose tags to add to this custom folder image.'),
     )}</p>
@@ -1232,6 +1291,28 @@ function renderCustomImageTagsContent(candidate, tagOptions) {
     <div data-custom-image-tags-hidden>
       ${renderCustomImageHiddenTagInputs(selectedOptions, preparedOptions)}
     </div>
+    <details class="pf2e-tokener-custom-image-tags-json">
+      <summary>${escapeHtml(localize('HUD.ImageTagsJson', 'Import / export JSON'))}</summary>
+      <p class="notes">${escapeHtml(
+        localize(
+          'HUD.ImageTagsJsonHint',
+          'Per-image JSON uses only GM-added tags. Source tags stay read-only.',
+        ),
+      )}</p>
+      <textarea name="customImageTagsJson" data-custom-image-tags-json spellcheck="false">${escapeHtml(
+        getImageTagOverrideExport(candidate.imageTagOverrides),
+      )}</textarea>
+      <div class="pf2e-tokener-custom-image-tags-json-actions">
+        <button type="button" data-custom-image-tag-action="export-json">
+          <i class="fas fa-download" aria-hidden="true"></i>
+          ${escapeHtml(localize('HUD.ExportImageTags', 'Export JSON'))}
+        </button>
+        <button type="button" data-custom-image-tag-action="import-json">
+          <i class="fas fa-upload" aria-hidden="true"></i>
+          ${escapeHtml(localize('HUD.ImportImageTags', 'Import JSON'))}
+        </button>
+      </div>
+    </details>
     <div class="pf2e-tokener-custom-image-tags-groups">
       ${groups
         .map(
@@ -1301,6 +1382,83 @@ function addCustomImageTag(root) {
   if (input) input.checked = true;
   if (valueInput) valueInput.value = '';
   updateCustomImageSelectedTags(root);
+}
+
+function exportCustomImageTags(root) {
+  const contentRoot = getCustomImageTagsRoot(root);
+  const imagePath = contentRoot?.dataset?.imageTagPath ?? '';
+  const tags = tagIdsToTags(getEditableCheckedImageTagIds(contentRoot));
+  const json = getImageTagOverrideExport(tags);
+  const textarea = contentRoot?.querySelector?.('[data-custom-image-tags-json]');
+  if (textarea) textarea.value = json;
+  downloadImageTagJson(json, getImageTagExportFilename(imagePath));
+}
+
+function importCustomImageTags(root) {
+  const contentRoot = getCustomImageTagsRoot(root);
+  const textarea = contentRoot?.querySelector?.('[data-custom-image-tags-json]');
+  let tags;
+  try {
+    tags = parseImageTagOverrideImport(
+      textarea?.value ?? '{}',
+      contentRoot?.dataset?.imageTagPath ?? '',
+    );
+  } catch {
+    globalThis.ui?.notifications?.error?.(
+      localize('Notifications.ImageTagsImportFailed', 'Tokener: failed to import image tags.'),
+    );
+    return false;
+  }
+
+  setEditableCustomImageTags(contentRoot, tags);
+  if (textarea) {
+    textarea.value = getImageTagOverrideExport(tags);
+  }
+  return true;
+}
+
+function getCustomImageTagsRoot(root) {
+  return matchesTarget(root, '.pf2e-tokener-custom-image-tags')
+    ? root
+    : root?.querySelector?.('.pf2e-tokener-custom-image-tags');
+}
+
+function setEditableCustomImageTags(root, tags) {
+  const ids = tagsToIds(tags);
+  root?.querySelectorAll?.('[name="imageTagIds"]').forEach((input) => {
+    if (!input.disabled) input.checked = false;
+  });
+
+  for (const id of ids) {
+    const input = ensureCustomImageTagInput(root, id);
+    if (input && !input.disabled) input.checked = true;
+  }
+  updateCustomImageSelectedTags(root);
+}
+
+function ensureCustomImageTagInput(root, id) {
+  const existing = root?.querySelector?.(`[name="imageTagIds"][value="${cssEscape(id)}"]`);
+  if (existing) return existing;
+
+  const [group, ...rest] = String(id ?? '').split(':');
+  const value = rest.join(':');
+  if (!group || !value) return null;
+
+  const hidden = root?.querySelector?.('[data-custom-image-tags-hidden]');
+  hidden?.insertAdjacentHTML?.(
+    'beforeend',
+    renderCustomImageHiddenTagInput({
+      group,
+      id,
+      label: normalizeLabel(value),
+    }),
+  );
+  return root?.querySelector?.(`[name="imageTagIds"][value="${cssEscape(id)}"]`);
+}
+
+function getImageTagExportFilename(imagePath) {
+  const base = normalizePath(imagePath).split('/').filter(Boolean).pop() || 'image';
+  return `tokener-image-tags-${base.replace(/\.[^.]+$/, '')}.json`;
 }
 
 function getSelectedCustomImageTagOptions(tags, indexedOptions, originalIds = new Set()) {
@@ -1459,7 +1617,7 @@ function toggleCardActions(card) {
 
 async function applyCandidateAction(action, candidate, tokenDocument, card, app = activePicker) {
   const actor = getDocumentActor(tokenDocument);
-  const availableAction = getApplyActionsForCandidate(candidate).some(
+  const availableAction = getPickerApplyActionsForCandidate(candidate, tokenDocument).some(
     (option) => option.action === action,
   );
   if (!availableAction) return;

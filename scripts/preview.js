@@ -1,7 +1,10 @@
 import { TAG_GROUP_ORDER } from './tags.js';
 import { localize, normalizeLabel, normalizeSearchText } from './utils.js';
 
-const PREVIEW_TAG_GROUP_ORDER = ['category', ...TAG_GROUP_ORDER.filter((group) => group !== 'category')];
+const PREVIEW_TAG_GROUP_ORDER = [
+  'category',
+  ...TAG_GROUP_ORDER.filter((group) => group !== 'category'),
+];
 
 export function getImagePreviewItems(candidate) {
   return [
@@ -17,7 +20,15 @@ export function getImagePreviewItems(candidate) {
       src: candidate?.tokenSrc || '',
       available: Boolean(candidate?.tokenSrc),
     },
-  ].filter((item) => item.available);
+    {
+      kind: 'subject',
+      label: localize('Preview.SubjectImage', 'Token subject'),
+      src: candidate?.subjectSrc || '',
+      available: Boolean(candidate?.subjectSrc),
+    },
+  ]
+    .filter((item) => item.available)
+    .filter((item, index, items) => items.findIndex((other) => other.src === item.src) === index);
 }
 
 export function getCandidatePreviewTagGroups(candidate) {
@@ -87,6 +98,7 @@ export function openImagePreview(candidate) {
   for (const item of items) {
     panes.append(createPreviewPane(item));
   }
+  if (!items.length) panes.append(createPreviewEmpty());
   const tags = createPreviewTags(candidate);
 
   const closePreview = () => {
@@ -162,9 +174,32 @@ function createPreviewPane(item) {
   const image = doc.createElement('img');
   image.src = item.src;
   image.alt = item.label;
-  image.addEventListener('error', () => pane.classList.add('is-hidden'));
+  image.addEventListener('error', () => showPreviewImageError(frame, item.src));
   frame.append(image);
 
   pane.append(heading, frame);
   return pane;
+}
+
+function createPreviewEmpty() {
+  const doc = globalThis.document;
+  const empty = doc.createElement('div');
+  empty.className = 'pf2e-tokener-preview-empty';
+  empty.textContent = localize('Preview.NoImages', 'No image available.');
+  return empty;
+}
+
+function showPreviewImageError(frame, src) {
+  const doc = globalThis.document;
+  const message = doc.createElement('div');
+  message.className = 'pf2e-tokener-preview-error';
+
+  const title = doc.createElement('strong');
+  title.textContent = localize('Preview.ImageUnavailable', 'Image failed to load.');
+
+  const path = doc.createElement('code');
+  path.textContent = src || '';
+
+  message.append(title, path);
+  frame.replaceChildren?.(message);
 }

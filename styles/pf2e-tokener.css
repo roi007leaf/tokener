@@ -22,6 +22,40 @@
   box-shadow: 0 0 6px rgba(214, 181, 109, 0.7);
 }
 
+.pf2e-tokener-actor-sheet-image-host {
+  position: relative;
+}
+
+.pf2e-tokener-actor-sheet-button {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  background: rgba(15, 18, 22, 0.78);
+  border: 1px solid rgba(245, 242, 232, 0.7);
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.pf2e-tokener-actor-sheet-button:hover,
+.pf2e-tokener-actor-sheet-button:focus-visible {
+  background: rgba(31, 77, 101, 0.95);
+  border-color: rgba(143, 185, 214, 0.95);
+}
+
+.pf2e-tokener-actor-sheet-button i {
+  margin: 0;
+  line-height: 1;
+}
+
 #token-hud .pf2e-tokener-panel {
   position: absolute;
   top: 0;
@@ -1402,6 +1436,40 @@
   padding-inline: 10px;
 }
 
+.pf2e-tokener-custom-image-tags-json {
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(143, 185, 214, 0.24);
+  border-radius: 5px;
+}
+
+.pf2e-tokener-custom-image-tags-json summary {
+  cursor: pointer;
+  color: var(--color-text-light-highlight, #f5f2e8);
+  font-weight: 700;
+}
+
+.pf2e-tokener-custom-image-tags-json textarea {
+  box-sizing: border-box;
+  min-height: 112px;
+  width: 100%;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  resize: vertical;
+}
+
+.pf2e-tokener-custom-image-tags-json-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pf2e-tokener-custom-image-tags-json-actions button {
+  min-height: 30px;
+}
+
 .pf2e-tokener-custom-image-tags-groups {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1442,6 +1510,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pf2e-tokener-image-tags-import-export {
+  display: grid;
+  gap: 10px;
+}
+
+.pf2e-tokener-image-tags-import-export textarea {
+  box-sizing: border-box;
+  font-family: var(--font-mono, monospace);
+  min-height: 260px;
+  resize: vertical;
+  width: 100%;
+}
+
+.pf2e-tokener-image-tags-import-export button {
+  justify-self: start;
 }
 
 .pf2e-tokener-app .pf2e-tokener-state {
@@ -1516,10 +1601,6 @@
   min-height: 0;
 }
 
-.pf2e-tokener-preview-pane.is-hidden {
-  display: none;
-}
-
 .pf2e-tokener-preview-pane h3 {
   margin: 0;
   font-size: 15px;
@@ -1547,6 +1628,25 @@
   color: var(--color-text-light-6, #cfc6b8);
   text-align: center;
   font-size: 14px;
+}
+
+.pf2e-tokener-preview-error {
+  display: grid;
+  gap: 8px;
+  max-width: min(680px, 100%);
+  padding: 20px;
+  color: var(--color-text-light-6, #cfc6b8);
+  text-align: center;
+}
+
+.pf2e-tokener-preview-error strong {
+  color: var(--color-text-light-highlight, #f5f2e8);
+}
+
+.pf2e-tokener-preview-error code {
+  overflow-wrap: anywhere;
+  color: var(--color-text-light-6, #cfc6b8);
+  font-size: 12px;
 }
 
 .pf2e-tokener-preview-tags {
