@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.2 - 2026-05-26
+
+### Fixed
+
+- Fixed single-image previews so square token art stays centered in a square frame instead of stretching across the full preview width.
+
 ## 2.1.1 - 2026-05-23
 
 ### Fixed

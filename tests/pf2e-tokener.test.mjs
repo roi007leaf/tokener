@@ -4130,6 +4130,13 @@ test('image preview CSS is fullscreen and side by side', () => {
   const preview = fs.readFileSync(new URL('../scripts/preview.js', import.meta.url), 'utf8');
   const overlayRule = css.match(/\.pf2e-tokener-preview\s*\{[^}]+\}/)?.[0] ?? '';
   const panesRule = css.match(/\.pf2e-tokener-preview-panes\s*\{[^}]+\}/)?.[0] ?? '';
+  const singlePanesRule =
+    css.match(/\.pf2e-tokener-preview-panes\.is-single\s*\{[^}]+\}/)?.[0] ?? '';
+  const singleFrameRule =
+    css.match(
+      /\.pf2e-tokener-preview-panes\.is-single \.pf2e-tokener-preview-frame\s*\{[^}]+\}/,
+    )?.[0] ?? '';
+  const imageRule = css.match(/\.pf2e-tokener-preview-frame img\s*\{[^}]+\}/)?.[0] ?? '';
   const errorRule = css.match(/\.pf2e-tokener-preview-error\s*\{[^}]+\}/)?.[0] ?? '';
   const tagsRule = css.match(/\.pf2e-tokener-preview-tags\s*\{[^}]+\}/)?.[0] ?? '';
   const tagRowRule = css.match(/\.pf2e-tokener-preview-tag-row\s*\{[^}]+\}/)?.[0] ?? '';
@@ -4138,11 +4145,18 @@ test('image preview CSS is fullscreen and side by side', () => {
   assert.match(overlayRule, /position:\s*fixed;/);
   assert.match(overlayRule, /inset:\s*0;/);
   assert.match(panesRule, /grid-template-columns:\s*repeat\(auto-fit, minmax\(320px, 1fr\)\);/);
+  assert.match(singlePanesRule, /justify-content:\s*center;/);
+  assert.match(singlePanesRule, /grid-template-columns:\s*minmax\(0,\s*min\(720px,\s*100%\)\);/);
+  assert.match(singleFrameRule, /aspect-ratio:\s*1\s*\/\s*1;/);
+  assert.match(imageRule, /width:\s*100%;/);
+  assert.match(imageRule, /height:\s*100%;/);
+  assert.match(imageRule, /object-position:\s*center;/);
   assert.match(errorRule, /text-align:\s*center;/);
   assert.match(tagsRule, /justify-self:\s*center;/);
   assert.match(tagsRule, /width:\s*min\(640px,\s*100%\);/);
   assert.match(tagRowRule, /grid-template-columns:\s*90px minmax\(0,\s*1fr\);/);
   assert.match(tagValuesRule, /justify-content:\s*start;/);
+  assert.match(preview, /panes\.classList\.toggle\('is-single', items\.length === 1\)/);
   assert.match(preview, /showPreviewImageError/);
   assert.doesNotMatch(preview, /classList\.add\('is-hidden'\)/);
 });

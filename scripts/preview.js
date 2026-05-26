@@ -95,6 +95,7 @@ export function openImagePreview(candidate) {
   const panes = doc.createElement('div');
   panes.className = 'pf2e-tokener-preview-panes';
   const items = getImagePreviewItems(candidate);
+  panes.classList.toggle('is-single', items.length === 1);
   for (const item of items) {
     panes.append(createPreviewPane(item));
   }
