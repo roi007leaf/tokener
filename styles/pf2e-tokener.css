@@ -247,14 +247,14 @@
 
 #token-hud .pf2e-tokener-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--pf2e-tokener-grid-min-size, 96px), 1fr));
   align-items: start;
   gap: 6px;
 }
 
 #token-hud .pf2e-tokener-card {
   display: grid;
-  grid-template-rows: 54px 0 auto auto auto;
+  grid-template-rows: var(--pf2e-tokener-art-size, 54px) 0 auto auto auto;
   gap: 3px;
   min-width: 0;
   padding: 5px;
@@ -286,8 +286,8 @@
 }
 
 #token-hud .pf2e-tokener-card img {
-  width: 54px;
-  height: 54px;
+  width: var(--pf2e-tokener-art-size, 54px);
+  height: var(--pf2e-tokener-art-size, 54px);
   justify-self: center;
   object-fit: contain;
   border-radius: 4px;
@@ -639,6 +639,36 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 5px;
+}
+
+#token-hud .pf2e-tokener-grid-size,
+.pf2e-tokener-app .pf2e-tokener-grid-size {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
+  background: rgba(14, 16, 19, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 5px;
+}
+
+#token-hud .pf2e-tokener-grid-size label,
+.pf2e-tokener-app .pf2e-tokener-grid-size label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--color-text-light-6, #cfc6b8);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#token-hud .pf2e-tokener-grid-size-slider,
+.pf2e-tokener-app .pf2e-tokener-grid-size-slider {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
 }
 
 .pf2e-tokener-app .pf2e-tokener-tag-filter {
@@ -1120,7 +1150,7 @@
 
 .pf2e-tokener-app .pf2e-tokener-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--pf2e-tokener-grid-min-size, 104px), 1fr));
   align-items: start;
   gap: 6px;
 }
@@ -1128,7 +1158,7 @@
 .pf2e-tokener-app .pf2e-tokener-card {
   position: relative;
   display: grid;
-  grid-template-rows: 54px 0 auto auto auto;
+  grid-template-rows: var(--pf2e-tokener-art-size, 54px) 0 auto auto auto;
   gap: 3px;
   min-width: 0;
   padding: 5px;
@@ -1208,8 +1238,8 @@
 }
 
 .pf2e-tokener-app .pf2e-tokener-card img {
-  width: 54px;
-  height: 54px;
+  width: var(--pf2e-tokener-art-size, 54px);
+  height: var(--pf2e-tokener-art-size, 54px);
   justify-self: center;
   object-fit: contain;
   background: rgba(0, 0, 0, 0.35);

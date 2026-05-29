@@ -32,6 +32,8 @@
   "PF2ETokener.HUD.ImageTagsJsonHint": "Per-image JSON uses only GM-added tags. Source tags stay read-only.",
   "PF2ETokener.HUD.ExportImageTags": "Export JSON",
   "PF2ETokener.HUD.ImportImageTags": "Import JSON",
+  "PF2ETokener.HUD.GridSize": "Size",
+  "PF2ETokener.HUD.GridSizeTooltip": "Adjust token art grid size.",
   "PF2ETokener.HUD.ShowMore": "Show more",
   "PF2ETokener.HUD.NoTokenArt": "No token art found.",
   "PF2ETokener.HUD.BestMatches": "Best matches",
@@ -99,6 +101,8 @@
   "PF2ETokener.Settings.ImageTags.ImportExportHint": "Copy or download GM-added image tag overrides. Paste JSON here and import to replace current overrides.",
   "PF2ETokener.Settings.ImageTags.Export": "Export JSON",
   "PF2ETokener.Settings.ImageTags.Import": "Import JSON",
+  "PF2ETokener.Settings.PickerGridSize.Name": "Token browser grid size",
+  "PF2ETokener.Settings.PickerGridSize.Hint": "Client-side default thumbnail size for the Tokener browser.",
   "PF2ETokener.Settings.PlayerOwned.Name": "Allow player-owned token access",
   "PF2ETokener.Settings.PlayerOwned.Hint": "Let players open Tokener from Token HUD for tokens they can update. Actor sheet and actor directory controls remain GM-only."
 }

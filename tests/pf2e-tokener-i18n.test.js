@@ -37,6 +37,8 @@ test('English localization file contains HUD/action/notification strings', () =>
   expect(translations['PF2ETokener.HUD.ResetTags']).toBeUndefined();
   expect(translations['PF2ETokener.HUD.IncludeTag']).toBe('Include tag');
   expect(translations['PF2ETokener.HUD.ExcludeTag']).toBe('Exclude tag');
+  expect(translations['PF2ETokener.HUD.GridSize']).toBe('Size');
+  expect(translations['PF2ETokener.HUD.GridSizeTooltip']).toBe('Adjust token art grid size.');
   expect(translations['PF2ETokener.HUD.ShowMore']).toBe('Show more');
   expect(translations['PF2ETokener.Actions.Token']).toBe('Token');
   expect(translations['PF2ETokener.Actions.Actor']).toBe('Actor');

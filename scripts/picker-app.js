@@ -22,6 +22,13 @@ import {
 } from './favorites.js';
 import { ensureIndex } from './foundry-index.js';
 import {
+  getPickerGridMinSize,
+  getPickerGridSize,
+  normalizePickerGridSize,
+  preparePickerGridSizeView,
+  setPickerGridSize,
+} from './grid-size.js';
+import {
   downloadImageTagJson,
   getImageTagOverrideExport,
   parseImageTagOverrideImport,
@@ -143,6 +150,7 @@ export function getTokenPickerApplicationClass(
       this.selectedTagIds = new Set();
       this.selectedExcludedTagIds = new Set();
       this.favoritesOnly = false;
+      this.gridSize = getPickerGridSize();
       this.resultLimit = DEFAULT_LIMIT;
       this._candidateMap = new Map();
       this._pendingScalePreview = null;
@@ -207,6 +215,7 @@ async function preparePickerContext(app) {
     searchQuery: app.searchQuery,
     sections,
     favorites: prepareFavoritesView(favoriteIds, app),
+    gridSize: preparePickerGridSizeView(app.gridSize),
     revert: prepareRevertView(app.tokenDocument),
     source: prepareSourceFilterView(sourceOptions, app),
     tags: prepareTagFilterView(tagOptions, app),
@@ -312,6 +321,11 @@ function handlePickerInput(app, event) {
   const target = event.target;
   if (matchesTarget(target, '.pf2e-tokener-scale-slider')) {
     handleScaleSliderInput(app, target);
+    return;
+  }
+
+  if (matchesTarget(target, '.pf2e-tokener-grid-size-slider')) {
+    handlePickerGridSizeInput(app, target);
     return;
   }
 
@@ -705,6 +719,26 @@ function updateCardScaleValue(card, target, scale) {
   if (input) input.value = value;
   const display = card?.querySelector?.(`[data-scale-value="${target}"]`);
   if (display) display.textContent = `${value}x`;
+}
+
+function handlePickerGridSizeInput(app, input) {
+  const size = normalizePickerGridSize(input?.value);
+  app.gridSize = size;
+  if (input) input.value = String(size);
+  const root =
+    input?.closest?.('.pf2e-tokener-panel') ??
+    normalizeHudElement(app?.parts?.main) ??
+    normalizeHudElement(app?.element);
+  applyPickerGridSize(root, size);
+  const value = root?.querySelector?.('[data-grid-size-value]');
+  if (value) value.textContent = `${size}px`;
+  void setPickerGridSize(size);
+}
+
+function applyPickerGridSize(root, size) {
+  if (!root?.style) return;
+  root.style.setProperty('--pf2e-tokener-art-size', `${size}px`);
+  root.style.setProperty('--pf2e-tokener-grid-min-size', `${getPickerGridMinSize(size)}px`);
 }
 
 function ensureScalePreviewSnapshot(app, card, candidate) {

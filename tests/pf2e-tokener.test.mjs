@@ -3034,9 +3034,7 @@ test('actor sheet Tokener button stays hidden for player-owned actors', () => {
 
     assert.deepEqual(addedClasses, []);
     assert.equal(
-      host.children.some((child) =>
-        child.className.includes('pf2e-tokener-actor-sheet-button'),
-      ),
+      host.children.some((child) => child.className.includes('pf2e-tokener-actor-sheet-button')),
       false,
     );
   } finally {
@@ -3314,6 +3312,41 @@ test('Token picker search input starts empty instead of using the token name', (
   assert.equal(app.searchQuery, '');
 });
 
+test('Token picker grid size setting defaults to 54px and clamps stored values', async () => {
+  const {
+    DEFAULT_PICKER_GRID_SIZE,
+    MAX_PICKER_GRID_SIZE,
+    MIN_PICKER_GRID_SIZE,
+    getPickerGridMinSize,
+    getPickerGridSize,
+    normalizePickerGridSize,
+    registerPickerGridSizeSetting,
+    setPickerGridSize,
+  } = await import('../scripts/grid-size.js');
+  const registered = [];
+  const writes = [];
+  const settings = {
+    get: () => 91,
+    register: (...args) => registered.push(args),
+    set: async (...args) => writes.push(args),
+  };
+
+  registerPickerGridSizeSetting(settings);
+  await setPickerGridSize(500, settings);
+
+  assert.equal(DEFAULT_PICKER_GRID_SIZE, 54);
+  assert.equal(MIN_PICKER_GRID_SIZE, 40);
+  assert.equal(MAX_PICKER_GRID_SIZE, 112);
+  assert.equal(normalizePickerGridSize(91), 92);
+  assert.equal(getPickerGridSize(settings), 92);
+  assert.equal(getPickerGridMinSize(DEFAULT_PICKER_GRID_SIZE), 104);
+  assert.deepEqual(registered[0].slice(0, 2), ['pf2e-tokener', 'pickerGridSize']);
+  assert.equal(registered[0][2].scope, 'client');
+  assert.equal(registered[0][2].config, false);
+  assert.equal(registered[0][2].default, DEFAULT_PICKER_GRID_SIZE);
+  assert.deepEqual(writes[0], ['pf2e-tokener', 'pickerGridSize', MAX_PICKER_GRID_SIZE]);
+});
+
 test('Token picker source controls use delegated listeners across part re-renders', () => {
   class FakeApplicationV2 {}
   const fakeMixin = (BaseApplication) => class FakeHandlebarsApplication extends BaseApplication {};
@@ -3520,6 +3553,8 @@ test('English localization file contains Token HUD strings', () => {
   );
   assert.equal(translations['PF2ETokener.HUD.ExportImageTags'], 'Export JSON');
   assert.equal(translations['PF2ETokener.HUD.ImportImageTags'], 'Import JSON');
+  assert.equal(translations['PF2ETokener.HUD.GridSize'], 'Size');
+  assert.equal(translations['PF2ETokener.HUD.GridSizeTooltip'], 'Adjust token art grid size.');
   assert.equal(translations['PF2ETokener.HUD.ShowMore'], 'Show more');
   assert.equal(translations['PF2ETokener.HUD.BestMatches'], 'Best matches');
   assert.equal(translations['PF2ETokener.HUD.SearchResults'], 'Search results');
@@ -3578,10 +3613,7 @@ test('English localization file contains Token HUD strings', () => {
     translations['PF2ETokener.Settings.PlayerOwned.Name'],
     'Allow player-owned token access',
   );
-  assert.match(
-    translations['PF2ETokener.Settings.PlayerOwned.Hint'],
-    /tokens they can update/,
-  );
+  assert.match(translations['PF2ETokener.Settings.PlayerOwned.Hint'], /tokens they can update/);
 });
 
 test('localize uses Foundry i18n and falls back when unavailable', () => {
@@ -3608,6 +3640,31 @@ test('token grid does not stretch sibling cards when one card opens actions', ()
   const gridRule = css.match(/#token-hud \.pf2e-tokener-grid\s*\{[^}]+\}/)?.[0] ?? '';
 
   assert.match(gridRule, /align-items:\s*start;/);
+});
+
+test('token picker exposes live grid size controls and CSS variables', () => {
+  const css = fs.readFileSync(new URL('../styles/pf2e-tokener.css', import.meta.url), 'utf8');
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+
+  assert.match(picker, /gridSize:\s*preparePickerGridSizeView\(app\.gridSize\)/);
+  assert.match(picker, /handlePickerGridSizeInput\(app,\s*target\)/);
+  assert.match(template, /style='--pf2e-tokener-art-size: {{gridSize\.value}}px;/);
+  assert.match(template, /--pf2e-tokener-grid-min-size: {{gridSize\.gridMin}}px;'/);
+  assert.match(template, /class='pf2e-tokener-grid-size'/);
+  assert.match(template, /data-grid-size-input/);
+  assert.match(template, /data-grid-size-value/);
+  assert.doesNotMatch(css, /grid-template-rows:\s*54px 0 auto auto auto;/);
+  assert.match(
+    css,
+    /grid-template-rows:\s*var\(--pf2e-tokener-art-size,\s*54px\) 0 auto auto auto;/,
+  );
+  assert.match(css, /width:\s*var\(--pf2e-tokener-art-size,\s*54px\);/);
+  assert.match(css, /height:\s*var\(--pf2e-tokener-art-size,\s*54px\);/);
+  assert.match(
+    css,
+    /grid-template-columns:\s*repeat\(\s*auto-fill,\s*minmax\(var\(--pf2e-tokener-grid-min-size,\s*104px\),\s*1fr\)\s*\);/,
+  );
 });
 
 test('truncated text helper sets Foundry tooltip attributes only', () => {

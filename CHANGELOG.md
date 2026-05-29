@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.3 - 2026-05-29
+
+### New
+
+- Added a client-side token browser grid size slider so art thumbnails can be resized from the picker.
+
 ## 2.1.2 - 2026-05-26
 
 ### Fixed

@@ -1,4 +1,7 @@
-<section class='pf2e-tokener-panel'>
+<section
+  class='pf2e-tokener-panel'
+  style='--pf2e-tokener-art-size: {{gridSize.value}}px; --pf2e-tokener-grid-min-size: {{gridSize.gridMin}}px;'
+>
   <div class='pf2e-tokener-layout'>
     <aside class='pf2e-tokener-sidebar'>
       <div class='pf2e-tokener-toolbar'>
@@ -63,6 +66,25 @@
             data-tooltip='{{favorites.tooltip}}'
             data-tooltip-direction='UP'
           >{{favorites.buttonLabel}}</button>
+      </div>
+
+      <div class='pf2e-tokener-grid-size'>
+        <label>
+          <span>{{gridSize.label}}</span>
+          <span data-grid-size-value>{{gridSize.valueLabel}}</span>
+        </label>
+        <input
+          class='pf2e-tokener-grid-size-slider'
+          type='range'
+          min='{{gridSize.min}}'
+          max='{{gridSize.max}}'
+          step='{{gridSize.step}}'
+          value='{{gridSize.value}}'
+          data-grid-size-input
+          aria-label='{{gridSize.label}}'
+          data-tooltip='{{gridSize.tooltip}}'
+          data-tooltip-direction='UP'
+        />
       </div>
 
       <div class='pf2e-tokener-filter-panel pf2e-tokener-tag-filter {{tags.className}}'>

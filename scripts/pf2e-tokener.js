@@ -3,6 +3,7 @@ import { renderActorDirectoryTokenerEntry, renderActorSheetTokenerEntry } from '
 import { registerCustomFolderSettings } from './custom-folders.js';
 import { registerFavoriteSettings } from './favorites.js';
 import { installApi, rebuildIndex, state } from './foundry-index.js';
+import { registerPickerGridSizeSetting } from './grid-size.js';
 import { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 import { registerImageTagSettings } from './image-tags.js';
 import { registerPermissionSettings } from './permissions.js';
@@ -47,6 +48,17 @@ export {
   registerFavoriteSettings,
   toggleFavoriteCandidate,
 } from './favorites.js';
+export {
+  DEFAULT_PICKER_GRID_SIZE,
+  getPickerGridMinSize,
+  getPickerGridSize,
+  MAX_PICKER_GRID_SIZE,
+  MIN_PICKER_GRID_SIZE,
+  normalizePickerGridSize,
+  preparePickerGridSizeView,
+  registerPickerGridSizeSetting,
+  setPickerGridSize,
+} from './grid-size.js';
 export {
   getCustomFolderSettingsApplicationClass,
   getCustomFolderSources,
@@ -137,6 +149,7 @@ function registerFoundryIntegration() {
     registerFavoriteSettings();
     registerCustomFolderSettings();
     registerImageTagSettings();
+    registerPickerGridSizeSetting();
     registerPermissionSettings();
   });
 
