@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.4 - 2026-05-31
+
+### New
+
+- Added multi-step token art history so repeated Tokener changes can be reverted one step at a time or restored from a history dialog.
+- Added thumbnail previews and art names to the Tokener history dialog.
+- Added Shift + right-click on the Token HUD button to restore the original token art when multiple history entries exist.
+
 ## 2.1.3 - 2026-05-29
 
 ### New

@@ -173,14 +173,48 @@ export function buildRevertSnapshot({ action, candidate, tokenDocument, profile 
 
 export function getLastRevertData(tokenDocument) {
   const actor = getDocumentActor(tokenDocument);
-  const tokenSnapshot = readFlag(tokenDocument, REVERT_FLAG_KEY);
-  const actorSnapshot = readFlag(actor, REVERT_FLAG_KEY);
+  const tokenSnapshot = getLatestRevertSnapshot(tokenDocument);
+  const actorSnapshot = getLatestRevertSnapshot(actor);
   if (tokenSnapshot && actorSnapshot) {
     return numberOr(actorSnapshot.time, 0) > numberOr(tokenSnapshot.time, 0)
       ? actorSnapshot
       : tokenSnapshot;
   }
   return tokenSnapshot ?? actorSnapshot ?? null;
+}
+
+export function getOriginalRevertData(tokenDocument) {
+  const entries = getRevertHistoryEntries(tokenDocument);
+  return entries[entries.length - 1]?.snapshot ?? null;
+}
+
+export function getRevertHistory(documentLike) {
+  return normalizeRevertHistory(readFlag(documentLike, REVERT_FLAG_KEY));
+}
+
+export function getRevertHistoryEntries(tokenDocument) {
+  const actor = getDocumentActor(tokenDocument);
+  const snapshots = [...getRevertHistory(tokenDocument), ...getRevertHistory(actor)].sort(
+    (left, right) => numberOr(right?.time, 0) - numberOr(left?.time, 0),
+  );
+  const entries = [];
+  for (const snapshot of snapshots) {
+    if (!entries.some((entry) => isSameRevertSnapshot(entry.snapshot, snapshot))) {
+      entries.push({ snapshot });
+    }
+  }
+  return entries;
+}
+
+export function buildRevertHistoryFlagValue(documentLike, snapshot, { replaceSnapshot } = {}) {
+  if (!hasRevertTargets(snapshot)) return getRevertHistoryFlagValue(documentLike);
+
+  const history = getRevertHistory(documentLike);
+  const replaceIndex = findSnapshotIndex(history, replaceSnapshot);
+  if (replaceIndex === history.length - 1) {
+    return [...history.slice(0, replaceIndex), snapshot];
+  }
+  return [...history, snapshot];
 }
 
 export function buildTokenRevertUpdate(snapshot, { profile } = {}) {
@@ -208,26 +242,82 @@ export function hasRevertTargets(snapshot) {
 }
 
 export async function revertLastTokenerChange(tokenDocument, { profile } = {}) {
+  return revertTokenerChangeToSnapshot(tokenDocument, getLastRevertData(tokenDocument), {
+    profile,
+  });
+}
+
+export async function revertTokenerChangeToOriginal(tokenDocument, { profile } = {}) {
+  return revertTokenerChangeToSnapshot(tokenDocument, getOriginalRevertData(tokenDocument), {
+    profile,
+  });
+}
+
+export async function revertTokenerChangeToSnapshot(tokenDocument, snapshot, { profile } = {}) {
   const systemProfile = resolveSystemProfile(profile);
   const actor = getDocumentActor(tokenDocument);
-  const snapshot = getLastRevertData(tokenDocument);
   if (!hasRevertTargets(snapshot)) return false;
 
   if (snapshot.token && tokenDocument?.update) {
     await tokenDocument.update({
       ...buildTokenRevertUpdate(snapshot, { profile: systemProfile }),
-      [REVERT_FLAG_PATH]: null,
+      [REVERT_FLAG_PATH]: truncateRevertHistoryFlagValue(tokenDocument, snapshot),
     });
   }
 
   if ((snapshot.actor || snapshot.portrait) && actor?.update) {
     await actor.update({
       ...buildActorRevertUpdate(snapshot, { profile: systemProfile }),
-      [REVERT_FLAG_PATH]: null,
+      [REVERT_FLAG_PATH]: truncateRevertHistoryFlagValue(actor, snapshot),
     });
   }
 
   return true;
+}
+
+function getLatestRevertSnapshot(documentLike) {
+  const history = getRevertHistory(documentLike);
+  return history[history.length - 1] ?? null;
+}
+
+function getRevertHistoryFlagValue(documentLike) {
+  const history = getRevertHistory(documentLike);
+  return history.length ? history : null;
+}
+
+function truncateRevertHistoryFlagValue(documentLike, snapshot) {
+  const history = getRevertHistory(documentLike);
+  const snapshotIndex = findSnapshotIndex(history, snapshot);
+  if (snapshotIndex < 0) return history.length ? history : null;
+
+  const nextHistory = history.slice(0, snapshotIndex);
+  return nextHistory.length ? nextHistory : null;
+}
+
+function normalizeRevertHistory(value) {
+  if (Array.isArray(value)) return value.filter(hasRevertTargets);
+  return hasRevertTargets(value) ? [value] : [];
+}
+
+function findSnapshotIndex(history, snapshot) {
+  if (!hasRevertTargets(snapshot)) return -1;
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    if (isSameRevertSnapshot(history[index], snapshot)) return index;
+  }
+  return -1;
+}
+
+function isSameRevertSnapshot(left, right) {
+  if (left === right) return true;
+  if (!hasRevertTargets(left) || !hasRevertTargets(right)) return false;
+  return (
+    String(left.action ?? '') === String(right.action ?? '') &&
+    String(left.label ?? '') === String(right.label ?? '') &&
+    numberOr(left.time, 0) === numberOr(right.time, 0) &&
+    JSON.stringify(left.token ?? null) === JSON.stringify(right.token ?? null) &&
+    JSON.stringify(left.actor ?? null) === JSON.stringify(right.actor ?? null) &&
+    JSON.stringify(left.portrait ?? null) === JSON.stringify(right.portrait ?? null)
+  );
 }
 
 function captureTokenState(documentLike, profile = resolveSystemProfile()) {

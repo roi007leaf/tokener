@@ -1,6 +1,16 @@
-import { getLastRevertData, hasRevertTargets, revertLastTokenerChange } from './actions.js';
+import {
+  getLastRevertData,
+  getRevertHistoryEntries,
+  hasRevertTargets,
+  revertLastTokenerChange,
+  revertTokenerChangeToOriginal,
+} from './actions.js';
 import { canUseTokenHudDocument } from './permissions.js';
-import { openTokenPicker, updateOpenPanelsCanvasZoom } from './picker-app.js';
+import {
+  openRevertHistoryDialog,
+  openTokenPicker,
+  updateOpenPanelsCanvasZoom,
+} from './picker-app.js';
 import { localize, normalizeHudElement } from './utils.js';
 
 export { updateOpenPanelsCanvasZoom } from './picker-app.js';
@@ -25,7 +35,7 @@ export function renderTokenHud(app, html) {
   button.addEventListener('contextmenu', async (event) => {
     event.preventDefault();
     event.stopPropagation();
-    await revertFromHudButton(button, tokenDocument);
+    await revertFromHudButton(button, tokenDocument, { resetToOriginal: event.shiftKey });
   });
   target.append(button);
 }
@@ -38,13 +48,23 @@ function setHudButtonRevertState(button, tokenDocument) {
     : localize('HUD.Tooltip', 'Tokener');
 }
 
-async function revertFromHudButton(button, tokenDocument) {
-  if (!hasRevertTargets(getLastRevertData(tokenDocument))) return;
+async function revertFromHudButton(button, tokenDocument, { resetToOriginal = false } = {}) {
+  const entries = getRevertHistoryEntries(tokenDocument);
+  if (!entries.length) return;
+
+  if (entries.length > 1 && !resetToOriginal) {
+    await openRevertHistoryDialog(tokenDocument, {
+      onReverted: () => setHudButtonRevertState(button, tokenDocument),
+    });
+    return;
+  }
 
   try {
-    const reverted = await revertLastTokenerChange(tokenDocument);
+    const reverted = resetToOriginal
+      ? await revertTokenerChangeToOriginal(tokenDocument)
+      : await revertLastTokenerChange(tokenDocument);
     if (!reverted) return;
-    setHudButtonRevertState(button, null);
+    setHudButtonRevertState(button, tokenDocument);
     globalThis.ui?.notifications?.info?.(
       localize('Notifications.Reverted', 'Tokener: previous art restored.'),
     );

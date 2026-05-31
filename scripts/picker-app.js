@@ -1,6 +1,7 @@
 import { DEFAULT_LIMIT, MODULE_ID } from './constants.js';
 import {
   buildActorUpdate,
+  buildRevertHistoryFlagValue,
   buildRevertSnapshot,
   buildTokenScalePreviewUpdate,
   buildTokenUpdate,
@@ -9,8 +10,11 @@ import {
   getCandidatePreviewSrc,
   getCandidatePreviewSources,
   getLastRevertData,
+  getRevertHistoryEntries,
   hasRevertTargets,
   REVERT_FLAG_PATH,
+  revertTokenerChangeToOriginal,
+  revertTokenerChangeToSnapshot,
   revertLastTokenerChange,
 } from './actions.js';
 import { getCandidatesForTokenDocument, searchCandidates } from './candidates.js';
@@ -45,6 +49,7 @@ import {
 import { getTagFilterOptions, getTagGroupSearchState, isTagOptionSearchMatch } from './tags.js';
 import {
   getDocumentActor,
+  labelFromPath,
   localize,
   normalizeLabel,
   normalizeHudElement,
@@ -368,7 +373,7 @@ async function handlePickerClick(app, event) {
 
   if (closestTarget(target, '[data-revert-action="last"]')) {
     event.preventDefault?.();
-    await revertLastChange(app);
+    await handleRevertControlClick(app);
     return;
   }
 
@@ -506,6 +511,13 @@ async function handlePickerClick(app, event) {
 }
 
 function handlePickerContextMenu(app, event) {
+  if (closestTarget(event.target, '[data-revert-action="last"]')) {
+    event.preventDefault?.();
+    event.stopPropagation?.();
+    void handleRevertControlContextMenu(app);
+    return;
+  }
+
   const card = closestTarget(event.target, '.pf2e-tokener-card');
   if (!card) return;
 
@@ -782,7 +794,13 @@ async function flushScalePreviewUpdate(app) {
     const snapshot = app._scalePreviewSnapshots?.get(pending.candidateId);
     await app.tokenDocument.update({
       ...update,
-      ...(snapshot ? { [REVERT_FLAG_PATH]: snapshot } : {}),
+      ...(snapshot
+        ? {
+            [REVERT_FLAG_PATH]: buildRevertHistoryFlagValue(app.tokenDocument, snapshot, {
+              replaceSnapshot: snapshot,
+            }),
+          }
+        : {}),
     });
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to preview token scale`, error);
@@ -1665,28 +1683,31 @@ async function applyCandidateAction(action, candidate, tokenDocument, card, app 
   const targets = getApplyTargets(action);
   const scale = readCardScaleValue(card, candidate, SCALE_TARGET_TOKEN, tokenDocument);
   const ringScale = readCardScaleValue(card, candidate, SCALE_TARGET_RING, tokenDocument);
-  const revertSnapshot = buildApplyRevertSnapshot(app, action, candidate, tokenDocument, card);
+  const previewSnapshot = getScalePreviewSnapshot(app, card);
+  const revertSnapshot = buildApplyRevertSnapshot(action, candidate, tokenDocument, previewSnapshot);
   card?.classList.add('is-applying');
 
   try {
     if (targets.token) {
       await tokenDocument.update({
         ...buildTokenUpdate(candidate, { scale, ringScale }),
-        [REVERT_FLAG_PATH]: revertSnapshot,
+        [REVERT_FLAG_PATH]: buildRevertHistoryFlagValue(tokenDocument, revertSnapshot, {
+          replaceSnapshot: previewSnapshot,
+        }),
       });
     }
 
     if (targets.actor && actor) {
       await actor.update({
         ...buildActorUpdate(candidate, { scale, ringScale }),
-        [REVERT_FLAG_PATH]: revertSnapshot,
+        [REVERT_FLAG_PATH]: buildRevertHistoryFlagValue(actor, revertSnapshot),
       });
     }
 
     if (targets.portrait && actor) {
       await actor.update({
         img: candidate.portraitSrc || candidate.tokenSrc,
-        [REVERT_FLAG_PATH]: revertSnapshot,
+        [REVERT_FLAG_PATH]: buildRevertHistoryFlagValue(actor, revertSnapshot),
       });
     }
 
@@ -1704,33 +1725,145 @@ async function applyCandidateAction(action, candidate, tokenDocument, card, app 
   }
 }
 
-function buildApplyRevertSnapshot(app, action, candidate, tokenDocument, card) {
+function getScalePreviewSnapshot(app, card) {
+  return app?._scalePreviewSnapshots?.get(card?.dataset?.candidateId) ?? null;
+}
+
+function buildApplyRevertSnapshot(action, candidate, tokenDocument, previewSnapshot) {
   const snapshot = buildRevertSnapshot({ action, candidate, tokenDocument });
-  const previewSnapshot = app?._scalePreviewSnapshots?.get(card?.dataset?.candidateId);
   if (previewSnapshot?.token) snapshot.token = previewSnapshot.token;
   return snapshot;
 }
 
-async function revertLastChange(app) {
-  const tokenDocument = app.tokenDocument;
+async function handleRevertControlClick(app) {
+  const entries = getRevertHistoryEntries(app.tokenDocument);
+  if (entries.length <= 1) {
+    await revertLastChange(app);
+    return;
+  }
+  await openRevertHistoryDialog(app.tokenDocument, {
+    onReverted: () => renderMainPart(app),
+  });
+}
 
-  try {
-    const reverted = await revertLastTokenerChange(tokenDocument);
+async function handleRevertControlContextMenu(app) {
+  const reverted = await revertSnapshotDocument(app.tokenDocument, null, {
+    original: true,
+  });
+  if (reverted) renderMainPart(app);
+}
+
+async function revertLastChange(app) {
+  const reverted = await revertSnapshotDocument(
+    app.tokenDocument,
+    getLastRevertData(app.tokenDocument),
+  );
+  if (reverted) renderMainPart(app);
+}
+
+export async function openRevertHistoryDialog(tokenDocument, { onReverted } = {}) {
+  const entries = getRevertHistoryEntries(tokenDocument);
+  if (!entries.length) return false;
+
+  const DialogV2 = resolveDialogV2Class();
+  if (!DialogV2?.input) return false;
+
+  await DialogV2.input({
+    window: {
+      icon: 'fas fa-history',
+      title: localize('HUD.RevertHistory', 'Tokener history'),
+    },
+    position: {
+      width: 420,
+    },
+    content: renderRevertHistoryDialogContent(entries),
+    render: (_event, dialog) =>
+      activateRevertHistoryDialog(dialog, tokenDocument, entries, onReverted),
+    ok: {
+      label: localize('HUD.Close', 'Close'),
+      icon: 'fas fa-times',
+    },
+  });
+  return true;
+}
+
+function renderRevertHistoryDialogContent(entries) {
+  return `<div class="pf2e-tokener-revert-history-dialog">
+    ${entries
+      .map((entry, index) => {
+        const snapshot = entry.snapshot;
+        const imageSrc = getSnapshotArtSrc(snapshot);
+        const name = getSnapshotArtLabel(snapshot);
+        const action = normalizeLabel(snapshot?.action);
+        return `<button
+          type="button"
+          class="pf2e-tokener-revert-history-choice"
+          data-revert-index="${index}"
+          data-tooltip="${escapeHtml(
+            localize('HUD.RevertHistoryTooltip', 'Restore this art from Tokener history.'),
+          )}"
+        >
+          ${imageSrc ? `<img class="pf2e-tokener-revert-history-image" src="${escapeHtml(imageSrc)}" alt="${escapeHtml(name)}" loading="lazy" />` : ''}
+          <span class="pf2e-tokener-revert-history-text">
+            <span class="pf2e-tokener-revert-history-name">${escapeHtml(name)}</span>
+            <span class="pf2e-tokener-revert-history-kind">${escapeHtml(action)}</span>
+          </span>
+        </button>`;
+      })
+      .join('')}
+  </div>`;
+}
+
+function activateRevertHistoryDialog(dialog, tokenDocument, entries, onReverted) {
+  const root = normalizeHudElement(dialog?.element);
+  if (!root || root.dataset.pf2eTokenerRevertHistoryBound) return;
+  root.dataset.pf2eTokenerRevertHistoryBound = 'true';
+
+  root.addEventListener?.('click', async (event) => {
+    const button = closestTarget(event.target, '[data-revert-index]');
+    if (!button) return;
+
+    event.preventDefault?.();
+    const snapshot = entries[Number(button.dataset.revertIndex)]?.snapshot;
+    const reverted = await revertSnapshotDocument(tokenDocument, snapshot);
     if (!reverted) return;
+
+    dialog?.close?.();
+    await onReverted?.();
+  });
+}
+
+async function revertSnapshotDocument(tokenDocument, snapshot, { original = false } = {}) {
+  try {
+    let reverted;
+    if (original) reverted = await revertTokenerChangeToOriginal(tokenDocument);
+    else if (snapshot) reverted = await revertTokenerChangeToSnapshot(tokenDocument, snapshot);
+    else reverted = await revertLastTokenerChange(tokenDocument);
+
+    if (!reverted) return false;
 
     globalThis.ui?.notifications?.info?.(
       localize('Notifications.Reverted', 'Tokener: previous art restored.'),
     );
+    return true;
   } catch (error) {
     console.error(`${MODULE_ID} | Failed to revert token art`, error);
     globalThis.ui?.notifications?.error?.(
       localize('Notifications.RevertFailed', 'Tokener: failed to restore previous art.'),
     );
-  } finally {
-    renderMainPart(app);
+    return false;
   }
 }
 
 function getRevertDetail(snapshot) {
-  return [normalizeLabel(snapshot?.action), snapshot?.label].filter(Boolean).join(': ');
+  return [normalizeLabel(snapshot?.action), getSnapshotArtLabel(snapshot)].filter(Boolean).join(': ');
+}
+
+function getSnapshotArtLabel(snapshot) {
+  const source = getSnapshotArtSrc(snapshot);
+  return source ? labelFromPath(source) : snapshot?.label;
+}
+
+function getSnapshotArtSrc(snapshot) {
+  return snapshot?.token?.texture?.src ?? snapshot?.actor?.texture?.src ?? snapshot?.portrait?.img ?? '';
 }

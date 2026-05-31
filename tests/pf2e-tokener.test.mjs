@@ -23,6 +23,7 @@ import {
   getSourceFilterLabel,
   getSourceFilterOptions,
   filterSourceOptionsByQuery,
+  getRevertHistoryEntries,
   getTagGroupSearchState,
   getTagFilterOptions,
   getTagListCountLabel,
@@ -60,12 +61,16 @@ import {
   renderActorDirectoryTokenerEntry,
   renderActorSheetTokenerEntry,
   registerPermissionSettings,
+  revertTokenerChangeToOriginal,
+  revertTokenerChangeToSnapshot,
+  revertLastTokenerChange,
   setTextTooltip,
   searchCandidates,
   state,
   toggleFavoriteCandidate,
   toggleTagFilterTerm,
 } from '../scripts/pf2e-tokener.js';
+import { openRevertHistoryDialog } from '../scripts/picker-app.js';
 
 const MODULE = {
   id: 'pf2e-tokens-draconic-codex',
@@ -2867,6 +2872,293 @@ test('last revert data can be read from selected token or actor flags', () => {
   );
 });
 
+test('revert history pops newest token snapshot until original art is restored', async () => {
+  const originalSnapshot = {
+    action: 'token',
+    label: 'Red Dragon',
+    time: 1,
+    token: {
+      texture: { src: 'original-token.webp', scaleX: 1, scaleY: 1 },
+      randomImg: true,
+      ring: { enabled: false, subject: { texture: '', scale: 1 } },
+    },
+  };
+  const redSnapshot = {
+    action: 'token',
+    label: 'Blue Dragon',
+    time: 2,
+    token: {
+      texture: { src: 'red-token.webp', scaleX: 1.2, scaleY: 1.2 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'red-subject.webp', scale: 1.4 } },
+    },
+  };
+  const updates = [];
+  const tokenDocument = {
+    flags: {
+      'pf2e-tokener': {
+        lastRevert: [originalSnapshot, redSnapshot],
+      },
+    },
+    async update(update) {
+      updates.push(update);
+      this.flags['pf2e-tokener'].lastRevert = update[REVERT_FLAG_PATH];
+    },
+  };
+
+  assert.equal(getLastRevertData(tokenDocument), redSnapshot);
+  assert.equal(await revertLastTokenerChange(tokenDocument), true);
+  assert.deepEqual(updates[0], {
+    'texture.src': 'red-token.webp',
+    'texture.scaleX': 1.2,
+    'texture.scaleY': 1.2,
+    randomImg: false,
+    'ring.enabled': true,
+    'ring.subject.texture': 'red-subject.webp',
+    'ring.subject.scale': 1.4,
+    [REVERT_FLAG_PATH]: [originalSnapshot],
+  });
+
+  assert.equal(getLastRevertData(tokenDocument), originalSnapshot);
+  assert.equal(await revertLastTokenerChange(tokenDocument), true);
+  assert.deepEqual(updates[1], {
+    'texture.src': 'original-token.webp',
+    'texture.scaleX': 1,
+    'texture.scaleY': 1,
+    randomImg: true,
+    'ring.enabled': false,
+    'ring.subject.texture': '',
+    'ring.subject.scale': 1,
+    [REVERT_FLAG_PATH]: null,
+  });
+  assert.equal(getLastRevertData(tokenDocument), null);
+});
+
+test('revert history can jump to a specific token snapshot and discard newer history', async () => {
+  const originalSnapshot = {
+    action: 'token',
+    label: 'Red Dragon',
+    time: 1,
+    token: {
+      texture: { src: 'original-token.webp', scaleX: 1, scaleY: 1 },
+      randomImg: true,
+      ring: { enabled: false, subject: { texture: '', scale: 1 } },
+    },
+  };
+  const redSnapshot = {
+    action: 'token',
+    label: 'Blue Dragon',
+    time: 2,
+    token: {
+      texture: { src: 'red-token.webp', scaleX: 1.2, scaleY: 1.2 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'red-subject.webp', scale: 1.4 } },
+    },
+  };
+  const blueSnapshot = {
+    action: 'token',
+    label: 'Green Dragon',
+    time: 3,
+    token: {
+      texture: { src: 'blue-token.webp', scaleX: 0.9, scaleY: 0.9 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'blue-subject.webp', scale: 1.1 } },
+    },
+  };
+  const updates = [];
+  const tokenDocument = {
+    flags: {
+      'pf2e-tokener': {
+        lastRevert: [originalSnapshot, redSnapshot, blueSnapshot],
+      },
+    },
+    async update(update) {
+      updates.push(update);
+      this.flags['pf2e-tokener'].lastRevert = update[REVERT_FLAG_PATH];
+    },
+  };
+
+  assert.deepEqual(
+    getRevertHistoryEntries(tokenDocument).map((entry) => entry.snapshot),
+    [blueSnapshot, redSnapshot, originalSnapshot],
+  );
+  assert.equal(await revertTokenerChangeToSnapshot(tokenDocument, redSnapshot), true);
+  assert.deepEqual(updates[0], {
+    'texture.src': 'red-token.webp',
+    'texture.scaleX': 1.2,
+    'texture.scaleY': 1.2,
+    randomImg: false,
+    'ring.enabled': true,
+    'ring.subject.texture': 'red-subject.webp',
+    'ring.subject.scale': 1.4,
+    [REVERT_FLAG_PATH]: [originalSnapshot],
+  });
+  assert.deepEqual(tokenDocument.flags['pf2e-tokener'].lastRevert, [originalSnapshot]);
+});
+
+test('revert history reset restores the original token snapshot', async () => {
+  const originalSnapshot = {
+    action: 'token',
+    label: 'Red Dragon',
+    time: 1,
+    token: {
+      texture: { src: 'original-token.webp', scaleX: 1, scaleY: 1 },
+      randomImg: true,
+      ring: { enabled: false, subject: { texture: '', scale: 1 } },
+    },
+  };
+  const laterSnapshot = {
+    action: 'token',
+    label: 'Blue Dragon',
+    time: 2,
+    token: {
+      texture: { src: 'later-token.webp', scaleX: 1.2, scaleY: 1.2 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'later-subject.webp', scale: 1.4 } },
+    },
+  };
+  const updates = [];
+  const tokenDocument = {
+    flags: {
+      'pf2e-tokener': {
+        lastRevert: [originalSnapshot, laterSnapshot],
+      },
+    },
+    async update(update) {
+      updates.push(update);
+      this.flags['pf2e-tokener'].lastRevert = update[REVERT_FLAG_PATH];
+    },
+  };
+
+  assert.equal(await revertTokenerChangeToOriginal(tokenDocument), true);
+  assert.deepEqual(updates[0], {
+    'texture.src': 'original-token.webp',
+    'texture.scaleX': 1,
+    'texture.scaleY': 1,
+    randomImg: true,
+    'ring.enabled': false,
+    'ring.subject.texture': '',
+    'ring.subject.scale': 1,
+    [REVERT_FLAG_PATH]: null,
+  });
+});
+
+test('revert history dialog restores the selected token snapshot', async () => {
+  const previousFoundry = globalThis.foundry;
+  const previousUi = globalThis.ui;
+  const originalSnapshot = {
+    action: 'token',
+    label: 'Red Dragon',
+    time: 1,
+    token: {
+      texture: { src: 'original-token.webp', scaleX: 1, scaleY: 1 },
+      randomImg: true,
+      ring: { enabled: false, subject: { texture: '', scale: 1 } },
+    },
+  };
+  const redSnapshot = {
+    action: 'token',
+    label: 'Blue Dragon',
+    time: 2,
+    token: {
+      texture: { src: 'red-token.webp', scaleX: 1.2, scaleY: 1.2 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'red-subject.webp', scale: 1.4 } },
+    },
+  };
+  const blueSnapshot = {
+    action: 'token',
+    label: 'Green Dragon',
+    time: 3,
+    token: {
+      texture: { src: 'blue-token.webp', scaleX: 0.9, scaleY: 0.9 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'blue-subject.webp', scale: 1.1 } },
+    },
+  };
+  const updates = [];
+  let dialogClosed = false;
+  let onReverted = false;
+  const tokenDocument = {
+    flags: {
+      'pf2e-tokener': {
+        lastRevert: [originalSnapshot, redSnapshot, blueSnapshot],
+      },
+    },
+    async update(update) {
+      updates.push(update);
+      this.flags['pf2e-tokener'].lastRevert = update[REVERT_FLAG_PATH];
+    },
+  };
+
+  try {
+    globalThis.ui = { notifications: { info() {}, error() {} } };
+    globalThis.foundry = {
+      applications: {
+        api: {
+          DialogV2: {
+            input: async (options) => {
+              assert.match(options.content, /pf2e-tokener-revert-history-image/);
+              assert.match(options.content, /src="blue-token\.webp"/);
+              assert.match(options.content, /Blue Token/);
+              assert.match(options.content, /src="red-token\.webp"/);
+              assert.match(options.content, /Red Token/);
+              const listeners = {};
+              const root = {
+                dataset: {},
+                nodeType: 1,
+                addEventListener: (type, listener) => {
+                  listeners[type] = listener;
+                },
+              };
+              options.render(null, {
+                element: root,
+                close: () => {
+                  dialogClosed = true;
+                },
+              });
+              await listeners.click({
+                target: {
+                  dataset: { revertIndex: '1' },
+                  closest: (selector) =>
+                    selector === '[data-revert-index]'
+                      ? { dataset: { revertIndex: '1' } }
+                      : null,
+                },
+                preventDefault() {},
+              });
+            },
+          },
+        },
+      },
+    };
+
+    assert.equal(
+      await openRevertHistoryDialog(tokenDocument, {
+        onReverted: () => {
+          onReverted = true;
+        },
+      }),
+      true,
+    );
+    assert.deepEqual(updates[0], {
+      'texture.src': 'red-token.webp',
+      'texture.scaleX': 1.2,
+      'texture.scaleY': 1.2,
+      randomImg: false,
+      'ring.enabled': true,
+      'ring.subject.texture': 'red-subject.webp',
+      'ring.subject.scale': 1.4,
+      [REVERT_FLAG_PATH]: [originalSnapshot],
+    });
+    assert.equal(dialogClosed, true);
+    assert.equal(onReverted, true);
+  } finally {
+    globalThis.foundry = previousFoundry;
+    globalThis.ui = previousUi;
+  }
+});
+
 test('HUD apply actions include separate token, actor, portrait, and both choices', () => {
   assert.deepEqual(
     getApplyActions().map((action) => action.action),
@@ -3207,8 +3499,14 @@ test('right-clicking active Token HUD button reverts last Tokener change', async
   };
   const tokenDocument = {
     actor: {
+      flags: {
+        'pf2e-tokener': {
+          lastRevert: snapshot,
+        },
+      },
       async update(update) {
         actorUpdates.push(update);
+        this.flags['pf2e-tokener'].lastRevert = update[REVERT_FLAG_PATH];
       },
     },
     canUserModify: () => true,
@@ -3219,6 +3517,7 @@ test('right-clicking active Token HUD button reverts last Tokener change', async
     },
     async update(update) {
       tokenUpdates.push(update);
+      this.flags['pf2e-tokener'].lastRevert = update[REVERT_FLAG_PATH];
     },
   };
 
@@ -3267,6 +3566,92 @@ test('right-clicking active Token HUD button reverts last Tokener change', async
     assert.deepEqual(messages, ['Tokener: previous art restored.']);
     assert.doesNotMatch(button.className, /is-overridden/);
     assert.equal(button.dataset.tooltip, 'Tokener');
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.game = previousGame;
+    globalThis.ui = previousUi;
+  }
+});
+
+test('Token HUD right-click opens history dialog when multiple revert entries exist', () => {
+  const hud = fs.readFileSync(new URL('../scripts/hud.js', import.meta.url), 'utf8');
+
+  assert.match(hud, /getRevertHistoryEntries/);
+  assert.match(hud, /openRevertHistoryDialog/);
+});
+
+test('shift-right-clicking Token HUD button reverts original history entry', async () => {
+  const previousDocument = globalThis.document;
+  const previousGame = globalThis.game;
+  const previousUi = globalThis.ui;
+  const { root, target } = createFakeHudRoot();
+  const originalSnapshot = {
+    action: 'token',
+    label: 'Original',
+    time: 1,
+    token: {
+      texture: { src: 'original-token.webp', scaleX: 1, scaleY: 1 },
+      randomImg: true,
+      ring: { enabled: false, subject: { texture: '', scale: 1 } },
+    },
+  };
+  const laterSnapshot = {
+    action: 'token',
+    label: 'Later',
+    time: 2,
+    token: {
+      texture: { src: 'later-token.webp', scaleX: 1.5, scaleY: 1.5 },
+      randomImg: false,
+      ring: { enabled: true, subject: { texture: 'later-subject.webp', scale: 1.25 } },
+    },
+  };
+  const updates = [];
+  const messages = [];
+  const tokenDocument = {
+    canUserModify: () => true,
+    flags: {
+      'pf2e-tokener': {
+        lastRevert: [originalSnapshot, laterSnapshot],
+      },
+    },
+    async update(update) {
+      updates.push(update);
+      this.flags['pf2e-tokener'].lastRevert = update[REVERT_FLAG_PATH];
+    },
+  };
+
+  try {
+    globalThis.document = { createElement: createFakeElement };
+    globalThis.game = { user: { id: 'gm1', isGM: true } };
+    globalThis.ui = {
+      notifications: {
+        info: (message) => messages.push(message),
+        error: (message) => messages.push(message),
+      },
+    };
+
+    renderTokenHud({ object: { document: tokenDocument } }, root);
+    const button = target.children.find((child) => child.className.includes('pf2e-tokener-button'));
+    await button.listeners.contextmenu({
+      shiftKey: true,
+      preventDefault() {},
+      stopPropagation() {},
+    });
+
+    assert.deepEqual(updates, [
+      {
+        'texture.src': 'original-token.webp',
+        'texture.scaleX': 1,
+        'texture.scaleY': 1,
+        randomImg: true,
+        'ring.enabled': false,
+        'ring.subject.texture': '',
+        'ring.subject.scale': 1,
+        [REVERT_FLAG_PATH]: null,
+      },
+    ]);
+    assert.deepEqual(messages, ['Tokener: previous art restored.']);
+    assert.doesNotMatch(button.className, /is-overridden/);
   } finally {
     globalThis.document = previousDocument;
     globalThis.game = previousGame;
@@ -3571,6 +3956,12 @@ test('English localization file contains Token HUD strings', () => {
     translations['PF2ETokener.HUD.RevertTooltip'],
     'Restore the art from before the last Tokener change.',
   );
+  assert.equal(
+    translations['PF2ETokener.HUD.RevertHistoryTooltip'],
+    'Restore this art from Tokener history.',
+  );
+  assert.equal(translations['PF2ETokener.HUD.RevertHistory'], 'Tokener history');
+  assert.equal(translations['PF2ETokener.HUD.Close'], 'Close');
   assert.equal(translations['PF2ETokener.Actions.Token'], 'Token');
   assert.equal(translations['PF2ETokener.Actions.Actor'], 'Actor');
   assert.equal(translations['PF2ETokener.Actions.Portrait'], 'Portrait');
@@ -3946,6 +4337,19 @@ test('ApplicationV2 token picker keeps search, source, tags, and revert controls
   assert.match(contentRule, /min-height:\s*0;/);
   assert.match(template, /data-revert-action=['"]last['"]/);
   assert.match(template, /data-favorites-filter=['"]toggle['"]/);
+});
+
+test('ApplicationV2 token picker opens a revert history dialog instead of inline entries', () => {
+  const template = fs.readFileSync(new URL('../templates/picker.hbs', import.meta.url), 'utf8');
+  const picker = fs.readFileSync(new URL('../scripts/picker-app.js', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(template, /pf2e-tokener-revert-history/);
+  assert.doesNotMatch(template, /data-revert-index/);
+  assert.match(picker, /getRevertHistoryEntries/);
+  assert.match(picker, /openRevertHistoryDialog/);
+  assert.match(picker, /revertTokenerChangeToOriginal/);
+  assert.match(picker, /data-revert-action="last"/);
+  assert.match(picker, /handleRevertControlContextMenu/);
 });
 
 test('favorite controls render on token cards and in the sidebar filter row', () => {

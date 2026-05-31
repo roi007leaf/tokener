@@ -28,8 +28,12 @@ export {
   getCandidatePreviewSrc,
   getCandidatePreviewSources,
   getLastRevertData,
+  getOriginalRevertData,
+  getRevertHistoryEntries,
   hasRevertTargets,
   REVERT_FLAG_PATH,
+  revertTokenerChangeToOriginal,
+  revertTokenerChangeToSnapshot,
   revertLastTokenerChange,
 } from './actions.js';
 export {

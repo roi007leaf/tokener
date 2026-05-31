@@ -1129,6 +1129,54 @@
   font-size: 11px;
 }
 
+.pf2e-tokener-revert-history-dialog {
+  display: grid;
+  gap: 6px;
+}
+
+.pf2e-tokener-revert-history-choice {
+  min-width: 0;
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  overflow: hidden;
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.pf2e-tokener-revert-history-image {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+
+.pf2e-tokener-revert-history-text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.pf2e-tokener-revert-history-name,
+.pf2e-tokener-revert-history-kind {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pf2e-tokener-revert-history-name {
+  font-weight: 600;
+}
+
+.pf2e-tokener-revert-history-kind {
+  opacity: 0.72;
+  font-size: 11px;
+}
+
 .pf2e-tokener-app .pf2e-tokener-content {
   min-height: 0;
   max-height: min(604px, calc(100vh - 144px));
