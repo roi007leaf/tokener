@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.5 - 2026-09-17
+
+### Fixed
+
+- Fixed portrait-only changes replacing an actor's default token art when Foundry automatically synchronized default artwork.
+- Fixed portrait-only history restores changing the actor's default token art.
+
 ## 2.1.4 - 2026-05-31
 
 ### New

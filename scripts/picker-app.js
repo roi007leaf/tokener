@@ -1,6 +1,7 @@
 import { DEFAULT_LIMIT, MODULE_ID } from './constants.js';
 import {
   buildActorUpdate,
+  buildPortraitUpdate,
   buildRevertHistoryFlagValue,
   buildRevertSnapshot,
   buildTokenScalePreviewUpdate,
@@ -1706,7 +1707,7 @@ async function applyCandidateAction(action, candidate, tokenDocument, card, app 
 
     if (targets.portrait && actor) {
       await actor.update({
-        img: candidate.portraitSrc || candidate.tokenSrc,
+        ...buildPortraitUpdate(candidate, actor),
         [REVERT_FLAG_PATH]: buildRevertHistoryFlagValue(actor, revertSnapshot),
       });
     }

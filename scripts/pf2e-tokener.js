@@ -18,6 +18,7 @@ export {
 export {
   buildActorUpdate,
   buildActorRevertUpdate,
+  buildPortraitUpdate,
   buildRevertSnapshot,
   buildTokenUpdate,
   buildTokenRevertUpdate,

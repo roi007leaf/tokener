@@ -126,6 +126,21 @@ export function buildActorUpdate(candidate, options = {}) {
   return actorUpdate;
 }
 
+export function buildPortraitUpdate(candidate, actor, { profile } = {}) {
+  const systemProfile = resolveSystemProfile(profile);
+  if (systemProfile.supportsActorPortrait === false) return {};
+
+  const update = {
+    img: getImageSource(candidate?.portraitSrc || candidate?.tokenSrc),
+  };
+  if (systemProfile.supportsPrototypeToken !== false) {
+    update['prototypeToken.texture.src'] = getImageSource(
+      readDocumentPath(actor?.prototypeToken, 'texture.src'),
+    );
+  }
+  return update;
+}
+
 export function buildTokenScalePreviewUpdate(
   candidate,
   scale,
@@ -222,7 +237,7 @@ export function buildTokenRevertUpdate(snapshot, { profile } = {}) {
   return tokenStateToUpdate(snapshot.token, resolveSystemProfile(profile));
 }
 
-export function buildActorRevertUpdate(snapshot, { profile } = {}) {
+export function buildActorRevertUpdate(snapshot, { actor, profile } = {}) {
   const systemProfile = resolveSystemProfile(profile);
   const update = {};
   if (isObject(snapshot?.actor) && systemProfile.supportsPrototypeToken !== false) {
@@ -230,8 +245,14 @@ export function buildActorRevertUpdate(snapshot, { profile } = {}) {
       update[`prototypeToken.${key}`] = value;
     }
   }
-  if (isObject(snapshot?.portrait) && systemProfile.supportsActorPortrait !== false)
+  if (isObject(snapshot?.portrait) && systemProfile.supportsActorPortrait !== false) {
     update.img = snapshot.portrait.img ?? '';
+    if (!isObject(snapshot?.actor) && systemProfile.supportsPrototypeToken !== false) {
+      update['prototypeToken.texture.src'] = getImageSource(
+        readDocumentPath(actor?.prototypeToken, 'texture.src'),
+      );
+    }
+  }
   return update;
 }
 
@@ -267,7 +288,7 @@ export async function revertTokenerChangeToSnapshot(tokenDocument, snapshot, { p
 
   if ((snapshot.actor || snapshot.portrait) && actor?.update) {
     await actor.update({
-      ...buildActorRevertUpdate(snapshot, { profile: systemProfile }),
+      ...buildActorRevertUpdate(snapshot, { actor, profile: systemProfile }),
       [REVERT_FLAG_PATH]: truncateRevertHistoryFlagValue(actor, snapshot),
     });
   }

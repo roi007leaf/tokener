@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import {
   buildActorUpdate,
   buildActorRevertUpdate,
+  buildPortraitUpdate,
   buildRevertSnapshot,
   buildTokenUpdate,
   buildTokenRevertUpdate,
@@ -2707,6 +2708,30 @@ test('actor update writes prototype token fields and portrait only', () => {
   });
 });
 
+test('portrait update preserves the prototype token source from Foundry automatic portrait syncing', () => {
+  const actor = {
+    prototypeToken: {
+      texture: {
+        src: 'systems/pf2e/icons/default-icons/npc.svg',
+      },
+    },
+  };
+
+  assert.deepEqual(
+    buildPortraitUpdate(
+      {
+        tokenSrc: 'modules/pkg/assets/tokens/herbalist.webp',
+        portraitSrc: 'modules/pkg/assets/portraits/herbalist.webp',
+      },
+      actor,
+    ),
+    {
+      img: 'modules/pkg/assets/portraits/herbalist.webp',
+      'prototypeToken.texture.src': 'systems/pf2e/icons/default-icons/npc.svg',
+    },
+  );
+});
+
 test('revert snapshot captures previous token, actor, and portrait art before applying changes', () => {
   const tokenDocument = {
     texture: {
@@ -2834,6 +2859,26 @@ test('revert updates restore token, actor prototype token, and actor portrait fi
     'prototypeToken.ring.subject.texture': 'old-prototype-subject.webp',
     'prototypeToken.ring.subject.scale': 1.4,
     img: 'old-portrait.webp',
+  });
+});
+
+test('portrait-only revert preserves the current prototype token source', () => {
+  const snapshot = {
+    portrait: {
+      img: 'old-portrait.webp',
+    },
+  };
+  const actor = {
+    prototypeToken: {
+      texture: {
+        src: 'current-token.webp',
+      },
+    },
+  };
+
+  assert.deepEqual(buildActorRevertUpdate(snapshot, { actor }), {
+    img: 'old-portrait.webp',
+    'prototypeToken.texture.src': 'current-token.webp',
   });
 });
 
