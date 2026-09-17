@@ -25,6 +25,7 @@ const DATASHEET_BROWSE_ROOTS = [
   { root: '', recursive: false },
 ];
 const DATASHEET_JSON = /(?:^|\/)[^/]*datasheet[^/]*\.json$/i;
+const INDEX_SCAN_CONCURRENCY = 4;
 
 export const state = {
   index: [],
@@ -69,23 +70,44 @@ export function installApi() {
 }
 
 async function buildFoundryIndex() {
-  const modules = getFoundryModules();
+  const modules = getFoundryModules().filter((module) => module && module.id !== MODULE_ID);
   const profile = getCurrentSystemProfile();
   const candidates = [];
 
-  for (const module of modules) {
-    if (!module || module.id === MODULE_ID) continue;
-    candidates.push(...(await collectMappedModuleCandidates(module, profile)));
-  }
+  const mappedCandidates = await mapWithConcurrency(
+    modules,
+    INDEX_SCAN_CONCURRENCY,
+    (module) => collectMappedModuleCandidates(module, profile),
+  );
+  for (const moduleCandidates of mappedCandidates) candidates.push(...moduleCandidates);
 
-  for (const module of modules) {
-    if (!module || module.id === MODULE_ID) continue;
-    candidates.push(...(await collectFolderModuleCandidates(module)));
-  }
+  const folderCandidates = await mapWithConcurrency(
+    modules,
+    INDEX_SCAN_CONCURRENCY,
+    collectFolderModuleCandidates,
+  );
+  for (const moduleCandidates of folderCandidates) candidates.push(...moduleCandidates);
 
   candidates.push(...(await collectCustomFolderCandidates()));
 
   return candidates;
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  if (!items.length) return [];
+  const results = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (cursor < items.length) {
+        const index = cursor++;
+        results[index] = await mapper(items[index], index);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
 }
 
 async function collectMappedModuleCandidates(module, profile = getCurrentSystemProfile()) {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.6 - 2026-09-17
+
+### Improved
+
+- Deferred token art indexing until the Tokener picker is first opened so catalog discovery no longer stalls canvas startup or movement.
+- Added bounded concurrent module scanning while preserving candidate order and results, substantially reducing large catalog build times.
+
 ## 2.1.5 - 2026-09-17
 
 ### Fixed

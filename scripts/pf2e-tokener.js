@@ -2,7 +2,7 @@ import { MODULE_ID } from './constants.js';
 import { renderActorDirectoryTokenerEntry, renderActorSheetTokenerEntry } from './actor-entry.js';
 import { registerCustomFolderSettings } from './custom-folders.js';
 import { registerFavoriteSettings } from './favorites.js';
-import { installApi, rebuildIndex, state } from './foundry-index.js';
+import { installApi } from './foundry-index.js';
 import { registerPickerGridSizeSetting } from './grid-size.js';
 import { renderTokenHud, updateOpenPanelsCanvasZoom } from './hud.js';
 import { registerImageTagSettings } from './image-tags.js';
@@ -158,16 +158,14 @@ function registerFoundryIntegration() {
     registerPermissionSettings();
   });
 
-  hooks.once('ready', async () => {
+  hooks.once('ready', () => {
     installApi();
-    await rebuildIndex();
     hooks.on('renderTokenHUD', renderTokenHud);
     for (const hook of ACTOR_SHEET_RENDER_HOOKS) {
       hooks.on(hook, renderActorSheetTokenerEntry);
     }
     hooks.on('renderActorDirectory', renderActorDirectoryTokenerEntry);
     hooks.on('canvasPan', updateOpenPanelsCanvasZoom);
-    console.log(`${MODULE_ID} | indexed ${state.index.length} token art candidates`);
   });
 }
 

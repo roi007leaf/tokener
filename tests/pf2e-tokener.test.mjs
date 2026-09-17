@@ -842,6 +842,59 @@ test('Foundry index folder-scans active modules by evidence instead of token-lik
   }
 });
 
+test('Foundry index scans modules concurrently while preserving candidate order', async () => {
+  const previousGame = globalThis.game;
+  const previousFoundry = globalThis.foundry;
+  state.index = [];
+  state.errors = [];
+  state.indexing = null;
+  let active = 0;
+  let maxActive = 0;
+  const modules = Array.from({ length: 8 }, (_, index) => ({
+    id: `art-pack-${index}`,
+    title: `Art Pack ${index}`,
+    flags: {},
+  }));
+  globalThis.game = { modules: new Map(modules.map((module) => [module.id, module])) };
+  globalThis.foundry = {
+    applications: {
+      apps: {
+        FilePicker: {
+          implementation: {
+            browse: async (_source, target) => {
+              active += 1;
+              maxActive = Math.max(maxActive, active);
+              await new Promise((resolve) => setTimeout(resolve, 2));
+              active -= 1;
+              const match = target.match(/^modules\/(art-pack-\d+)\/assets\/tokens$/);
+              return { files: match ? [`${target}/${match[1]}.webp`] : [] };
+            },
+          },
+        },
+      },
+    },
+  };
+
+  try {
+    const index = await rebuildIndex();
+
+    assert.ok(maxActive > 1, `Expected concurrent module scans; max active was ${maxActive}`);
+    assert.ok(maxActive <= 4, `Module scan concurrency exceeded limit: ${maxActive}`);
+    assert.deepEqual(
+      index.map((candidate) => candidate.moduleId),
+      modules.map((module) => module.id),
+    );
+  } finally {
+    if (previousGame === undefined) delete globalThis.game;
+    else globalThis.game = previousGame;
+    if (previousFoundry === undefined) delete globalThis.foundry;
+    else globalThis.foundry = previousFoundry;
+    state.index = [];
+    state.errors = [];
+    state.indexing = null;
+  }
+});
+
 test('Foundry index discovers datasheets from monster and adventure modules', async () => {
   const previousGame = globalThis.game;
   const previousFoundry = globalThis.foundry;
@@ -3766,7 +3819,7 @@ test('Token picker grid size setting defaults to 54px and clamps stored values',
 
   assert.equal(DEFAULT_PICKER_GRID_SIZE, 54);
   assert.equal(MIN_PICKER_GRID_SIZE, 40);
-  assert.equal(MAX_PICKER_GRID_SIZE, 112);
+  assert.equal(MAX_PICKER_GRID_SIZE, 200);
   assert.equal(normalizePickerGridSize(91), 92);
   assert.equal(getPickerGridSize(settings), 92);
   assert.equal(getPickerGridMinSize(DEFAULT_PICKER_GRID_SIZE), 104);
@@ -3917,7 +3970,8 @@ test('ready hook no longer skips non-PF2e systems', () => {
   const script = fs.readFileSync(new URL('../scripts/pf2e-tokener.js', import.meta.url), 'utf8');
 
   assert.doesNotMatch(script, /system\?\.id\s*!==\s*['"]pf2e['"]/);
-  assert.match(script, /await rebuildIndex\(\)/);
+  assert.doesNotMatch(script, /hooks\.once\('ready', async \(\) => \{[\s\S]*?await rebuildIndex\(\)/);
+  assert.match(script, /installApi\(\);/);
   assert.match(script, /'renderActorSheet'/);
   assert.match(script, /hooks\.on\(hook, renderActorSheetTokenerEntry\)/);
   assert.match(script, /'renderNPCSheetPF2e'/);
