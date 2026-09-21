@@ -1,6 +1,13 @@
 import { MODULE_ID } from './constants.js';
 import { getCurrentSystemProfile } from './system-profile.js';
-import { getDocumentActor, isObject, localize, normalizePath, numberOr } from './utils.js';
+import {
+  getDocumentActor,
+  isObject,
+  localize,
+  normalizePath,
+  numberOr,
+  pruneStaleDependentTokens,
+} from './utils.js';
 
 export const REVERT_FLAG_KEY = 'lastRevert';
 export const REVERT_FLAG_PATH = `flags.${MODULE_ID}.${REVERT_FLAG_KEY}`;
@@ -287,6 +294,7 @@ export async function revertTokenerChangeToSnapshot(tokenDocument, snapshot, { p
   }
 
   if ((snapshot.actor || snapshot.portrait) && actor?.update) {
+    pruneStaleDependentTokens(actor);
     await actor.update({
       ...buildActorRevertUpdate(snapshot, { actor, profile: systemProfile }),
       [REVERT_FLAG_PATH]: truncateRevertHistoryFlagValue(actor, snapshot),

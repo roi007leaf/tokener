@@ -1,7 +1,7 @@
 import { REVERT_FLAG_PATH } from './actions.js';
 import { canUseActorTokenerEntry } from './permissions.js';
 import { openTokenPicker } from './picker-app.js';
-import { localize, normalizeHudElement } from './utils.js';
+import { localize, normalizeHudElement, pruneStaleDependentTokens } from './utils.js';
 
 const ACTOR_SHEET_IMAGE_SELECTOR = [
   'img[data-edit="img"]',
@@ -93,6 +93,7 @@ export function createActorTokenDocument(actor) {
       for (const [key, value] of Object.entries(update ?? {})) {
         actorUpdate[key === REVERT_FLAG_PATH ? key : `prototypeToken.${key}`] = value;
       }
+      pruneStaleDependentTokens(actor);
       return actor?.update?.(actorUpdate);
     },
   };

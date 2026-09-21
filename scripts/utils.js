@@ -90,3 +90,24 @@ export function compareStrings(a = '', b = '') {
 export function getDocumentActor(tokenDocument) {
   return tokenDocument?.baseActor ?? tokenDocument?.actor ?? null;
 }
+
+/**
+ * Drop TokenDocuments that are no longer (or never were) part of their scene from the
+ * actor's dependent-token registry. Foundry registers unpersisted drop previews as
+ * dependents and never unregisters them; when the actor's art changes, PF2e's
+ * simulateUpdate then draws a ghost token for them at the old drop position.
+ */
+export function pruneStaleDependentTokens(actor) {
+  const registry = actor?._dependentTokens;
+  if (!registry?.entries) return 0;
+  let pruned = 0;
+  for (const [scene, tokens] of registry.entries()) {
+    if (!tokens?.delete) continue;
+    for (const token of Array.from(tokens)) {
+      if (scene?.tokens?.get?.(token?.id) === token) continue;
+      tokens.delete(token);
+      pruned += 1;
+    }
+  }
+  return pruned;
+}

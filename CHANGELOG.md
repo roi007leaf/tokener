@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.7 - 2026-09-21
+
+### Fixed
+
+- Fixed a ghost token image appearing on the canvas where a token had previously been placed after changing an actor's art from the sidebar or sheet. Foundry keeps unsaved drop previews registered as actor dependents, and PF2e redrew them on art changes; Tokener now prunes stale dependents before updating the actor.
+
 ## 2.1.6 - 2026-09-17
 
 ### Improved

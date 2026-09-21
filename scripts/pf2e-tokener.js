@@ -122,6 +122,7 @@ export {
   getPanelZoomData,
   localize,
   normalizeHudElement,
+  pruneStaleDependentTokens,
   setTextTooltip,
 } from './utils.js';
 export {

@@ -10,6 +10,7 @@ import {
   buildTokenUpdate,
   buildTokenRevertUpdate,
   buildTokenScalePreviewUpdate,
+  pruneStaleDependentTokens,
   REVERT_FLAG_PATH,
   getCanvasZoom,
   getApplyActions,
@@ -4719,4 +4720,48 @@ test('image preview CSS is fullscreen and side by side', () => {
   assert.match(preview, /panes\.classList\.toggle\('is-single', items\.length === 1\)/);
   assert.match(preview, /showPreviewImageError/);
   assert.doesNotMatch(preview, /classList\.add\('is-hidden'\)/);
+});
+
+test('pruneStaleDependentTokens drops unpersisted token documents from actor dependents', () => {
+  const persisted = { id: 'token-a' };
+  const ephemeral = { id: 'token-a' };
+  const orphan = { id: 'token-b' };
+  const scene = { tokens: new Map([['token-a', persisted]]) };
+  const dependents = new Set([persisted, ephemeral, orphan]);
+  const actor = { _dependentTokens: new Map([[scene, dependents]]) };
+
+  assert.equal(pruneStaleDependentTokens(actor), 2);
+  assert.deepEqual([...dependents], [persisted]);
+  assert.equal(pruneStaleDependentTokens(actor), 0);
+  assert.equal(pruneStaleDependentTokens(null), 0);
+  assert.equal(pruneStaleDependentTokens({}), 0);
+});
+
+test('actor updates prune stale dependent tokens before writing', async () => {
+  const persisted = { id: 'token-a' };
+  const ephemeral = { id: 'token-a' };
+  const scene = { tokens: new Map([['token-a', persisted]]) };
+  const dependents = new Set([persisted, ephemeral]);
+  const calls = [];
+  const actor = {
+    id: 'actor-1',
+    img: 'old-portrait.webp',
+    prototypeToken: { texture: { src: 'old-token.webp', scaleX: 1, scaleY: 1 } },
+    flags: {},
+    _dependentTokens: new Map([[scene, dependents]]),
+    async update(update) {
+      calls.push({ update, dependents: [...dependents] });
+    },
+  };
+
+  const proxy = createActorTokenDocument(actor);
+  await proxy.update({ 'texture.src': 'new-token.webp' });
+  assert.deepEqual(calls[0].dependents, [persisted]);
+
+  dependents.add(ephemeral);
+  await revertTokenerChangeToSnapshot(
+    { actor, flags: {} },
+    { action: 'portrait', portrait: { img: 'old-portrait.webp' } },
+  );
+  assert.deepEqual(calls[1].dependents, [persisted]);
 });

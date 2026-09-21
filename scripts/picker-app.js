@@ -56,6 +56,7 @@ import {
   normalizeHudElement,
   normalizePath,
   normalizeSearchText,
+  pruneStaleDependentTokens,
 } from './utils.js';
 
 const PICKER_TEMPLATE = 'modules/pf2e-tokener/templates/picker.hbs';
@@ -1699,6 +1700,7 @@ async function applyCandidateAction(action, candidate, tokenDocument, card, app 
     }
 
     if (targets.actor && actor) {
+      pruneStaleDependentTokens(actor);
       await actor.update({
         ...buildActorUpdate(candidate, { scale, ringScale }),
         [REVERT_FLAG_PATH]: buildRevertHistoryFlagValue(actor, revertSnapshot),
@@ -1706,6 +1708,7 @@ async function applyCandidateAction(action, candidate, tokenDocument, card, app 
     }
 
     if (targets.portrait && actor) {
+      pruneStaleDependentTokens(actor);
       await actor.update({
         ...buildPortraitUpdate(candidate, actor),
         [REVERT_FLAG_PATH]: buildRevertHistoryFlagValue(actor, revertSnapshot),
